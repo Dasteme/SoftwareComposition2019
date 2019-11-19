@@ -1,0 +1,1721 @@
+post_link,title,body_question,body_answer,viewcount,tags,score,score_answer,answercount,LastActivityDate,AcceptedAnswerId,CommentCount,FavoriteCount,LastEditorUserId,LastEditorDisplayName,LastEditDate,CreationDate,ClosedDate
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","BCrypt is a very good library, and there is a Java port of it.
+","142171","<java><passwords><cryptographic-hash-function>","168","27","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","You can comput hashes using MessageDigest, but this is wrong in terms of security. Hashes are not to be used for storing passwords, as they are easily breakable. 
+You should use another algorithm like bcrypt, PBKDF2 and scrypt to store you passwords. See here.
+","142171","<java><passwords><cryptographic-hash-function>","168","8","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","Here you have two links for MD5 hashing and other hash methods:
+Javadoc API: http://java.sun.com/j2se/1.4.2/docs/api/java/security/MessageDigest.html
+Tutorial: http://www.twmacinta.com/myjava/fast_md5.php
+","142171","<java><passwords><cryptographic-hash-function>","168","2","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","Among all the standard hash schemes, LDAP ssha is the most secure one to use,
+http://www.openldap.org/faq/data/cache/347.html
+I would just follow the algorithms specified there and use MessageDigest to do the hash.
+You need to store the salt in your database as you suggested.
+","142171","<java><passwords><cryptographic-hash-function>","168","1","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","You can actually use a facility built in to the Java runtime to do this. The SunJCE in Java 6 supports PBKDF2, which is a good algorithm to use for password hashing.
+byte[] salt = new byte[16];
+random.nextBytes(salt);
+KeySpec spec = new PBEKeySpec(""password"".toCharArray(), salt, 65536, 128);
+SecretKeyFactory f = SecretKeyFactory.getInstance(""PBKDF2WithHmacSHA1"");
+byte[] hash = f.generateSecret(spec).getEncoded();
+Base64.Encoder enc = Base64.getEncoder();
+System.out.printf(""salt: %s%n"", enc.encodeToString(salt));
+System.out.printf(""hash: %s%n"", enc.encodeToString(hash));
+
+Here's a utility class that you can use for PBKDF2 password authentication:
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+
+/**
+ * Hash passwords for storage, and test passwords against password tokens.
+ * 
+ * Instances of this class can be used concurrently by multiple threads.
+ *  
+ * @author erickson
+ * @see <a href=""http://stackoverflow.com/a/2861125/3474"">StackOverflow</a>
+ */
+public final class PasswordAuthentication
+{
+
+  /**
+   * Each token produced by this class uses this identifier as a prefix.
+   */
+  public static final String ID = ""$31$"";
+
+  /**
+   * The minimum recommended cost, used by default
+   */
+  public static final int DEFAULT_COST = 16;
+
+  private static final String ALGORITHM = ""PBKDF2WithHmacSHA1"";
+
+  private static final int SIZE = 128;
+
+  private static final Pattern layout = Pattern.compile(""\\$31\\$(\\d\\d?)\\$(.{43})"");
+
+  private final SecureRandom random;
+
+  private final int cost;
+
+  public PasswordAuthentication()
+  {
+    this(DEFAULT_COST);
+  }
+
+  /**
+   * Create a password manager with a specified cost
+   * 
+   * @param cost the exponential computational cost of hashing a password, 0 to 30
+   */
+  public PasswordAuthentication(int cost)
+  {
+    iterations(cost); /* Validate cost */
+    this.cost = cost;
+    this.random = new SecureRandom();
+  }
+
+  private static int iterations(int cost)
+  {
+    if ((cost < 0) || (cost > 30))
+      throw new IllegalArgumentException(""cost: "" + cost);
+    return 1 << cost;
+  }
+
+  /**
+   * Hash a password for storage.
+   * 
+   * @return a secure authentication token to be stored for later authentication 
+   */
+  public String hash(char[] password)
+  {
+    byte[] salt = new byte[SIZE / 8];
+    random.nextBytes(salt);
+    byte[] dk = pbkdf2(password, salt, 1 << cost);
+    byte[] hash = new byte[salt.length + dk.length];
+    System.arraycopy(salt, 0, hash, 0, salt.length);
+    System.arraycopy(dk, 0, hash, salt.length, dk.length);
+    Base64.Encoder enc = Base64.getUrlEncoder().withoutPadding();
+    return ID + cost + '$' + enc.encodeToString(hash);
+  }
+
+  /**
+   * Authenticate with a password and a stored password token.
+   * 
+   * @return true if the password and token match
+   */
+  public boolean authenticate(char[] password, String token)
+  {
+    Matcher m = layout.matcher(token);
+    if (!m.matches())
+      throw new IllegalArgumentException(""Invalid token format"");
+    int iterations = iterations(Integer.parseInt(m.group(1)));
+    byte[] hash = Base64.getUrlDecoder().decode(m.group(2));
+    byte[] salt = Arrays.copyOfRange(hash, 0, SIZE / 8);
+    byte[] check = pbkdf2(password, salt, iterations);
+    int zero = 0;
+    for (int idx = 0; idx < check.length; ++idx)
+      zero |= hash[salt.length + idx] ^ check[idx];
+    return zero == 0;
+  }
+
+  private static byte[] pbkdf2(char[] password, byte[] salt, int iterations)
+  {
+    KeySpec spec = new PBEKeySpec(password, salt, iterations, SIZE);
+    try {
+      SecretKeyFactory f = SecretKeyFactory.getInstance(ALGORITHM);
+      return f.generateSecret(spec).getEncoded();
+    }
+    catch (NoSuchAlgorithmException ex) {
+      throw new IllegalStateException(""Missing algorithm: "" + ALGORITHM, ex);
+    }
+    catch (InvalidKeySpecException ex) {
+      throw new IllegalStateException(""Invalid SecretKeyFactory"", ex);
+    }
+  }
+
+  /**
+   * Hash a password in an immutable {@code String}. 
+   * 
+   * <p>Passwords should be stored in a {@code char[]} so that it can be filled 
+   * with zeros after use instead of lingering on the heap and elsewhere.
+   * 
+   * @deprecated Use {@link #hash(char[])} instead
+   */
+  @Deprecated
+  public String hash(String password)
+  {
+    return hash(password.toCharArray());
+  }
+
+  /**
+   * Authenticate with a password in an immutable {@code String} and a stored 
+   * password token. 
+   * 
+   * @deprecated Use {@link #authenticate(char[],String)} instead.
+   * @see #hash(String)
+   */
+  @Deprecated
+  public boolean authenticate(String password, String token)
+  {
+    return authenticate(password.toCharArray(), token);
+  }
+
+}
+
+","142171","<java><passwords><cryptographic-hash-function>","168","148","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","You can use the Shiro library's (formerly JSecurity) implementation of what is described by OWASP. 
+It also looks like the JASYPT library has a similar utility.
+","142171","<java><passwords><cryptographic-hash-function>","168","6","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","Fully agree with Erickson that PBKDF2 is the answer.
+If you don't have that option, or only need to use a hash, Apache Commons DigestUtils is much easier than getting JCE code right:
+https://commons.apache.org/proper/commons-codec/apidocs/org/apache/commons/codec/digest/DigestUtils.html
+If you use a hash, go with sha256 or sha512. This page has good recommendations on password handling and hashing (note it doesn't recommend hashing for password handling):
+http://www.daemonology.net/blog/2009-06-11-cryptographic-right-answers.html
+","142171","<java><passwords><cryptographic-hash-function>","168","6","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","Here is a complete implementation with two methods doing exactly what you want:
+String getSaltedHash(String password)
+boolean checkPassword(String password, String stored)
+
+The point is that even if an attacker gets access to both your database and source code, the passwords are still safe.
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+import java.security.SecureRandom;
+import org.apache.commons.codec.binary.Base64;
+
+public class Password {
+    // The higher the number of iterations the more 
+    // expensive computing the hash is for us and
+    // also for an attacker.
+    private static final int iterations = 20*1000;
+    private static final int saltLen = 32;
+    private static final int desiredKeyLen = 256;
+
+    /** Computes a salted PBKDF2 hash of given plaintext password
+        suitable for storing in a database. 
+        Empty passwords are not supported. */
+    public static String getSaltedHash(String password) throws Exception {
+        byte[] salt = SecureRandom.getInstance(""SHA1PRNG"").generateSeed(saltLen);
+        // store the salt with the password
+        return Base64.encodeBase64String(salt) + ""$"" + hash(password, salt);
+    }
+
+    /** Checks whether given plaintext password corresponds 
+        to a stored salted hash of the password. */
+    public static boolean check(String password, String stored) throws Exception{
+        String[] saltAndHash = stored.split(""\\$"");
+        if (saltAndHash.length != 2) {
+            throw new IllegalStateException(
+                ""The stored password must have the form 'salt$hash'"");
+        }
+        String hashOfInput = hash(password, Base64.decodeBase64(saltAndHash[0]));
+        return hashOfInput.equals(saltAndHash[1]);
+    }
+
+    // using PBKDF2 from Sun, an alternative is https://github.com/wg/scrypt
+    // cf. http://www.unlimitednovelty.com/2012/03/dont-use-bcrypt.html
+    private static String hash(String password, byte[] salt) throws Exception {
+        if (password == null || password.length() == 0)
+            throw new IllegalArgumentException(""Empty passwords are not supported."");
+        SecretKeyFactory f = SecretKeyFactory.getInstance(""PBKDF2WithHmacSHA1"");
+        SecretKey key = f.generateSecret(new PBEKeySpec(
+            password.toCharArray(), salt, iterations, desiredKeyLen));
+        return Base64.encodeBase64String(key.getEncoded());
+    }
+}
+
+We are storing 'salt$iterated_hash(password, salt)'. The salt are 32 random bytes and it's purpose is that if two different people choose the same password, the stored passwords will still look different.
+The iterated_hash, which is basically hash(hash(hash(... hash(password, salt) ...))) makes it very expensive for a potential attacker who has access to your database to guess passwords, hash them, and look up hashes in the database. You have to compute this iterated_hash every time a user logs in, but it doesn't cost you that much compared to the attacker who spends nearly 100% of their time computing hashes.
+","142171","<java><passwords><cryptographic-hash-function>","168","92","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","In addition to bcrypt and PBKDF2 mentioned in other answers, I would recommend looking at scrypt 
+MD5 and SHA-1 are not recommended as they are relatively fast thus using ""rent per hour"" distributed computing (e.g. EC2) or a modern high end GPU one can ""crack"" passwords using brute force / dictionary attacks in relatively low costs and reasonable time.
+If you must use them, then at least iterate the algorithm a predefined significant amount of times (1000+).
+
+See here for more: https://security.stackexchange.com/questions/211/how-to-securely-hash-passwords
+And here: http://codahale.com/how-to-safely-store-a-password/ (criticizes SHA family, MD5 etc for password hashing purposes)
+And here: http://www.unlimitednovelty.com/2012/03/dont-use-bcrypt.html (criticizes bcrypt and recommends scrypt and PBKDF2)
+
+","142171","<java><passwords><cryptographic-hash-function>","168","6","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","While the NIST recommendation PBKDF2 has already been mentioned, I'd like to point out that there was a public password hashing competition that ran from 2013 to 2015. In the end, Argon2 was chosen as the recommended password hashing function.
+There is a fairly well adopted Java binding for the original (native C) library that you can use.
+In the average use-case, I don't think it does matter from a security perspective if you choose PBKDF2 over Argon2 or vice-versa. If you have strong security requirements, I recommend considering Argon2 in your evaluation.
+For further information on the security of password hashing functions see security.se.
+","142171","<java><passwords><cryptographic-hash-function>","168","4","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","You could use Spring Security Crypto (has only 2 optional compile dependencies), which supports PBKDF2, BCrypt, SCrypt and Argon2 password encryption.
+Argon2PasswordEncoder argon2PasswordEncoder = new Argon2PasswordEncoder();
+String aCryptedPassword = argon2PasswordEncoder.encode(""password"");
+boolean passwordIsValid = argon2PasswordEncoder.matches(""password"", aCryptedPassword);
+
+SCryptPasswordEncoder sCryptPasswordEncoder = new SCryptPasswordEncoder();
+String sCryptedPassword = sCryptPasswordEncoder.encode(""password"");
+boolean passwordIsValid = sCryptPasswordEncoder.matches(""password"", sCryptedPassword);
+
+BCryptPasswordEncoder bCryptPasswordEncoder = new BCryptPasswordEncoder();
+String bCryptedPassword = bCryptPasswordEncoder.encode(""password"");
+boolean passwordIsValid = bCryptPasswordEncoder.matches(""password"", bCryptedPassword);
+
+Pbkdf2PasswordEncoder pbkdf2PasswordEncoder = new Pbkdf2PasswordEncoder();
+String pbkdf2CryptedPassword = pbkdf2PasswordEncoder.encode(""password"");
+boolean passwordIsValid = pbkdf2PasswordEncoder.matches(""password"", pbkdf2CryptedPassword);
+
+","142171","<java><passwords><cryptographic-hash-function>","168","2","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"2860943","How can I hash a password in Java?","I need to hash passwords for storage in a database. How can I do this in Java?
+I was hoping to take the plain text password, add a random salt, then store the salt and the hashed password in the database.
+Then when a user wanted to log in, I could take their submitted password, add the random salt from their account information, hash it and see if it equates to the stored hash password with their account information.
+","i leaned that from a video on udemy and edited to be stronger random password
+}
+
+private String pass() {
+        String passswet=""1234567890zxcvbbnmasdfghjklop[iuytrtewq@#$%^&*"" ;
+
+        char icon1;
+        char[] t=new char[20];
+
+         int rand1=(int)(Math.random()*6)+38;//to make a random within the range of special characters
+
+            icon1=passswet.charAt(rand1);//will produce char with a special character
+
+        int i=0;
+        while( i <11) {
+
+             int rand=(int)(Math.random()*passswet.length());
+             //notice (int) as the original value of Math>random() is double
+
+             t[i] =passswet.charAt(rand);
+
+             i++;
+                t[10]=icon1;
+//to replace the specified item with icon1
+         }
+        return new String(t);
+}
+
+
+
+
+
+
+}
+
+","142171","<java><passwords><cryptographic-hash-function>","168","0","12","2019-10-30 17:10:08","2861125","6","92","1768232","","2015-07-30 14:44:38","2010-05-18 20:35:16",""
+"12120313","Generating k pairwise independent hash functions","I'm trying to implement a Count-Min Sketch algorithm in Scala, and so I need to generate k pairwise independent hash functions.
+This is a lower-level than anything I've ever programmed before, and I don't know much about hash functions except from Algorithms classes, so my question is: how do I generate these k pairwise independent hash functions?
+Am I supposed to use a hash function like MD5 or MurmurHash? Do I just generate k hash functions of the form f(x) = ax + b (mod p), where p is a prime and a and b are random integers? (i.e., the universal hashing family everyone learns in algorithms 101)
+I'm looking more for simplicity than raw speed (e.g., I'll take something 5x slower if it's simpler to implement).
+","Probably the simplest approach is to take some cryptographic hash function and ""seed"" it with different sequences of bytes. For most practical purposes, the results should be independent, as this is one of the key properties a cryptographic hash function should have (if you replace any part of a message, the hash should be completely different).
+I'd do something like:
+// for each 0 <= i < k generate a sequence of random numbers
+val randomSeeds: Array[Array[Byte]] = ... ; // initialize by random sequences
+
+def hash(i: Int, value: Array[Byte]): Array[Byte] = {
+    val dg = java.security.MessageDigest.getInstance(""SHA-1"");
+    // ""seed"" the digest by a random value based on the index
+    dg.update(randomSeeds(i));
+    return dg.digest(value);
+    // if you need integer hash values, just take 4 bytes
+    // of the result and convert them to an int
+}
+
+
+Edit: 
+I don't know the precise requirements of the Count-Min Sketch, maybe a simple has function would suffice, but it doesn't seem to be the simplest solution.
+I suggested a cryptographic hash function, because there you have quite strong guarantees that the resulting hash functions will be very different, and it's easy to implement, just use the standard libraries.
+On the other hand, if you have two hash functions of the form f1(x) = ax + b (mod p) and f2(x) = cx + d (mod p), then you can compute one using another (without knowing x) using a simple linear formula f2(x) = c / a * (f1(x) - b) + d (mod p), which suggests that they aren't very independent. So you could run into unexpected problems here.
+","2366","<scala><hash-function><cryptographic-hash-function>","9","2","2","2012-08-26 01:45:00","","1","3","231588","","2012-08-26 01:45:00","2012-08-25 08:11:21",""
+"12120313","Generating k pairwise independent hash functions","I'm trying to implement a Count-Min Sketch algorithm in Scala, and so I need to generate k pairwise independent hash functions.
+This is a lower-level than anything I've ever programmed before, and I don't know much about hash functions except from Algorithms classes, so my question is: how do I generate these k pairwise independent hash functions?
+Am I supposed to use a hash function like MD5 or MurmurHash? Do I just generate k hash functions of the form f(x) = ax + b (mod p), where p is a prime and a and b are random integers? (i.e., the universal hashing family everyone learns in algorithms 101)
+I'm looking more for simplicity than raw speed (e.g., I'll take something 5x slower if it's simpler to implement).
+","Scala already has MurmurHash implemented (it's scala.util.MurmurHash).  It's very fast and very good at distributing values.  A cryptographic hash is overkill--you'll just take tens or hundreds of times longer than you need to.  Just pick k different seeds to start with and, since it's nearly cryptographic in quality, you'll get k largely independent hash codes.  (In 2.10, you should probably switch to using scala.util.hashing.MurmurHash3; the usage is rather different but you can still do the same thing with mixing.)
+If you only need near values to be mapped to randomly far values this will work; if you want to avoid collisions (i.e. if A and B collide using hash 1 they will probably not also collide using hash 2), then you'll need to go at least one more step and hash not the whole object but subcomponents of it so there's an opportunity for the hashes to start out different.
+","2366","<scala><hash-function><cryptographic-hash-function>","9","4","2","2012-08-26 01:45:00","","1","3","231588","","2012-08-26 01:45:00","2012-08-25 08:11:21",""
+"4861865","How to decrypt the value","Actually I want to get the password back from the encrypted password. 
+The password is encrypted as follows:
+MessageDigest md = MessageDigest.getInstance(""SHA"");
+md.reset();
+byte[] encryptedBinarySource = md.digest(source.getBytes(""UTF-8""));
+
+How to decrypt the value of encryptedBinarySource? 
+","You can't. SHA is an one-way encryption. Being able to decrypt it would break its sole purpose. Rather use a two-way encryption algorithm. Or if it is intented to encrypt sensitive information like passwords in your case, then you should rather encrypt the newly entered password the same way and compare its result with the original encrypted password which you've stored somewhere.
+There are however so-called rainbow tables which enables you (and the hackers!) to reveal the original value based on a hash. For SHA the chance on a successful match is however much lower than MD5.
+","2137","<java><encryption><digest-authentication><cryptographic-hash-function>","1","5","2","2011-02-01 14:29:59","","4","2","12048","","2011-02-01 14:29:59","2011-02-01 11:18:12",""
+"4861865","How to decrypt the value","Actually I want to get the password back from the encrypted password. 
+The password is encrypted as follows:
+MessageDigest md = MessageDigest.getInstance(""SHA"");
+md.reset();
+byte[] encryptedBinarySource = md.digest(source.getBytes(""UTF-8""));
+
+How to decrypt the value of encryptedBinarySource? 
+","You can not decrypt a hash. A hash is a one-way function. Hashed passwords are indeed used not to store the actual password (you hash the password introduced by the user and compare to the stored hash)
+","2137","<java><encryption><digest-authentication><cryptographic-hash-function>","1","3","2","2011-02-01 14:29:59","","4","2","12048","","2011-02-01 14:29:59","2011-02-01 11:18:12",""
+"35846358","Can't login with encrypted password from database","I can encrypt my password with md5 by simply wrapping it around - 
+$Password = md5($_POST['password']);
+
+The encrypted password gets stored in the database successfully when the user registers. However when i want to login with the plain text password, it decides not too. How can I solve this issue?
+<?php
+
+if(isset($_POST['btnlogin'])) {
+
+$Email = $_POST['email'];
+$Password = $_POST['password'];
+
+
+
+$Email = mysqli_real_escape_string($connection, $Email);
+$Password = mysqli_real_escape_string($connection, $Password);
+
+$query =""SELECT * FROM customers WHERE Email = '{$Email}' AND Password =   '{$Password}'"";
+
+
+$select_customer_query = mysqli_query($connection, $query);
+
+if (!$select_customer_query)
+
+die(""QUERY FAILED"". mysqli_error($connection));
+
+}
+
+while($row = mysqli_fetch_array($select_customer_query)) {
+
+$Email_db = $row['Email'];
+$Password_db = $row['Password'];
+$Firstname_db = $row['First_Name'];
+$Lastname_db = $row['Last_Name'];
+$string =""logged in as"";
+$logoutlink = '/ <a href=""includes/back/logout.php"">Logout</a>';
+
+
+
+} 
+
+
+if ($Email_db == $Email || $Password_db == $Password  ) {
+
+
+header(""Location: ../../index.php"");
+
+
+
+$_SESSION['FirstName'] = $Firstname_db;
+$_SESSION['LastName'] = $Lastname_db;
+$_SESSION['string'] = $string;
+$_SESSION['logoutlink'] = $logoutlink;
+
+
+} 
+
+
+?>
+
+","In this line:
+$Password = $_POST['password'];
+
+Need to change to:
+$Password = md5($_POST['password']);
+
+Because you need compare encrypt passowrds.
+","2006","<php><md5><password-hash><cryptographic-hash-function>","1","0","3","2016-03-07 18:41:28","","7","","2224584","","2016-03-07 18:35:28","2016-03-07 14:33:02",""
+"35846358","Can't login with encrypted password from database","I can encrypt my password with md5 by simply wrapping it around - 
+$Password = md5($_POST['password']);
+
+The encrypted password gets stored in the database successfully when the user registers. However when i want to login with the plain text password, it decides not too. How can I solve this issue?
+<?php
+
+if(isset($_POST['btnlogin'])) {
+
+$Email = $_POST['email'];
+$Password = $_POST['password'];
+
+
+
+$Email = mysqli_real_escape_string($connection, $Email);
+$Password = mysqli_real_escape_string($connection, $Password);
+
+$query =""SELECT * FROM customers WHERE Email = '{$Email}' AND Password =   '{$Password}'"";
+
+
+$select_customer_query = mysqli_query($connection, $query);
+
+if (!$select_customer_query)
+
+die(""QUERY FAILED"". mysqli_error($connection));
+
+}
+
+while($row = mysqli_fetch_array($select_customer_query)) {
+
+$Email_db = $row['Email'];
+$Password_db = $row['Password'];
+$Firstname_db = $row['First_Name'];
+$Lastname_db = $row['Last_Name'];
+$string =""logged in as"";
+$logoutlink = '/ <a href=""includes/back/logout.php"">Logout</a>';
+
+
+
+} 
+
+
+if ($Email_db == $Email || $Password_db == $Password  ) {
+
+
+header(""Location: ../../index.php"");
+
+
+
+$_SESSION['FirstName'] = $Firstname_db;
+$_SESSION['LastName'] = $Lastname_db;
+$_SESSION['string'] = $string;
+$_SESSION['logoutlink'] = $logoutlink;
+
+
+} 
+
+
+?>
+
+","You forgot to md5() the password before comparing, you'll need to compare the md5() version:
+$Password = md5($_POST['password']);
+
+Currently, you are comparing $Password_db == $Password
+$Password = $_POST['password']; //Not md5() hashed
+$Password_db = $row['Password']; //md5() hashed
+
+Just a tip, you should't use md5() as it's not secure.
+","2006","<php><md5><password-hash><cryptographic-hash-function>","1","2","3","2016-03-07 18:41:28","","7","","2224584","","2016-03-07 18:35:28","2016-03-07 14:33:02",""
+"35846358","Can't login with encrypted password from database","I can encrypt my password with md5 by simply wrapping it around - 
+$Password = md5($_POST['password']);
+
+The encrypted password gets stored in the database successfully when the user registers. However when i want to login with the plain text password, it decides not too. How can I solve this issue?
+<?php
+
+if(isset($_POST['btnlogin'])) {
+
+$Email = $_POST['email'];
+$Password = $_POST['password'];
+
+
+
+$Email = mysqli_real_escape_string($connection, $Email);
+$Password = mysqli_real_escape_string($connection, $Password);
+
+$query =""SELECT * FROM customers WHERE Email = '{$Email}' AND Password =   '{$Password}'"";
+
+
+$select_customer_query = mysqli_query($connection, $query);
+
+if (!$select_customer_query)
+
+die(""QUERY FAILED"". mysqli_error($connection));
+
+}
+
+while($row = mysqli_fetch_array($select_customer_query)) {
+
+$Email_db = $row['Email'];
+$Password_db = $row['Password'];
+$Firstname_db = $row['First_Name'];
+$Lastname_db = $row['Last_Name'];
+$string =""logged in as"";
+$logoutlink = '/ <a href=""includes/back/logout.php"">Logout</a>';
+
+
+
+} 
+
+
+if ($Email_db == $Email || $Password_db == $Password  ) {
+
+
+header(""Location: ../../index.php"");
+
+
+
+$_SESSION['FirstName'] = $Firstname_db;
+$_SESSION['LastName'] = $Lastname_db;
+$_SESSION['string'] = $string;
+$_SESSION['logoutlink'] = $logoutlink;
+
+
+} 
+
+
+?>
+
+","Instead of what you're doing, to be secure, you'll want a workflow that looks something like this:
+
+Grab the user ID and password-hash from the database, for the given customer.
+If password_verify($password, $storedHash), proceed.
+
+Don't outsource your password check to the SELECT query. Don't store plaintext passwords. Don't use MD5 for password protection. Don't call MD5 encryption.
+Recommended reading:
+
+How to safely store your users' passwords (use password_hash() and password_verify())
+How to prevent SQL injection (use prepared statements)
+The correct cryptography terminology (MD5 is not an encryption algorithm)
+
+","2006","<php><md5><password-hash><cryptographic-hash-function>","1","2","3","2016-03-07 18:41:28","","7","","2224584","","2016-03-07 18:35:28","2016-03-07 14:33:02",""
+"6644769","SHA1 Hash algorithm issues","I'm attempting to store a user's password in my program, but I don't want to store it in plain text. Therefore, I'm hashing it and storing that instead, and when the user needs to enter his password upon the program start (to protect against unauthorized users), I'm hashing the entered password and comparing the two hashes.
+However, the following code is generating the same hash for almost any password entered. Can anyone either tell me how to fix the following code, or direct me to a better hash function?
+public static string getSHA1(string userPassword)
+{
+    return BitConverter.ToString(SHA1Managed.Create().ComputeHash(Encoding.Default.GetBytes(userPassword))).Replace(""-"", """");
+}
+
+Thanks for any assistance.
+","I plugged your function into a new project and it seemed to be working OK, so check how the password is being supplied to the function. I'd be wary of using Encoding.Default instead of an explicit coding, as it says it's system-dependent.
+Here's the one I made:
+    public static string getSHA1(string userPassword)
+    {
+        return Convert.ToBase64String(new SHA1Managed().ComputeHash(Encoding.Unicode.GetBytes(userPassword)));
+    }
+
+Note: as pointed out in the comments, doing password storage/matching this way is bad:
+
+you are using a fast hashing algorithm. You want password hashing to be slow to mitigate brute-force attacks. Bcrypt does a good job of this.
+you are not salting your hash. Salting means adding some random data to the password prior to hashing, then storing the random data along with the hash. This makes rainbow tables (huge hash to password maps) useless.
+
+","1656","<c#><.net><hash-function><cryptographic-hash-function>","1","0","2","2011-07-11 01:09:14","6644826","3","0","","","","2011-07-11 00:51:04",""
+"6644769","SHA1 Hash algorithm issues","I'm attempting to store a user's password in my program, but I don't want to store it in plain text. Therefore, I'm hashing it and storing that instead, and when the user needs to enter his password upon the program start (to protect against unauthorized users), I'm hashing the entered password and comparing the two hashes.
+However, the following code is generating the same hash for almost any password entered. Can anyone either tell me how to fix the following code, or direct me to a better hash function?
+public static string getSHA1(string userPassword)
+{
+    return BitConverter.ToString(SHA1Managed.Create().ComputeHash(Encoding.Default.GetBytes(userPassword))).Replace(""-"", """");
+}
+
+Thanks for any assistance.
+","Use somehting like this
+    private static string GetSHA1(string text)
+    {
+        UnicodeEncoding UE = new UnicodeEncoding();
+        byte[] hashValue;
+        byte[] message = UE.GetBytes(text);
+
+        SHA1Managed hashString = new SHA1Managed();
+        string hex = """";
+
+        hashValue = hashString.ComputeHash(message);
+        foreach (byte x in hashValue)
+        {
+            hex += String.Format(""{0:x2}"", x);
+        }
+        return hex;
+    }
+
+","1656","<c#><.net><hash-function><cryptographic-hash-function>","1","1","2","2011-07-11 01:09:14","6644826","3","0","","","","2011-07-11 00:51:04",""
+"3178109","How to generate a hash string with some special rules in PHP?","I'm working on a project where I need to use some hash function to make a hash string. This hash string should be unique consists of 6 to 13 characters (fixed length).
+I use a database to store data, so for each record, I have a unique ID. I want to use this unique ID to make a hash string ( to achieve uniqueness of resulted hash string).
+I need this hash string to consists of only valid characters ( 0-9 a-z A-Z).
+Which hash function should I use to achieve this goal? How can I generate such hash strings?
+Added Later: I want to generate this string and pass it to user, so he can come back later to edit the entry. any other idea is acceptable.
+","<?php
+  $id;
+  $hash_full = md5($id); //hash('sha256', $id);
+  $hash_cropped = substr($hash_full, 0, 6);
+?>
+
+Use hash() for other hashing algorithms.
+But what do you need this hashes for? To me, it doesn't make a lot of sense to generate a hash from the ID, couldn't you just use the ID instead?
+","1596","<php><hash><cryptographic-hash-function>","2","0","3","2010-07-05 09:26:50","3178212","7","","153015","","2010-07-05 09:26:50","2010-07-05 08:41:28",""
+"3178109","How to generate a hash string with some special rules in PHP?","I'm working on a project where I need to use some hash function to make a hash string. This hash string should be unique consists of 6 to 13 characters (fixed length).
+I use a database to store data, so for each record, I have a unique ID. I want to use this unique ID to make a hash string ( to achieve uniqueness of resulted hash string).
+I need this hash string to consists of only valid characters ( 0-9 a-z A-Z).
+Which hash function should I use to achieve this goal? How can I generate such hash strings?
+Added Later: I want to generate this string and pass it to user, so he can come back later to edit the entry. any other idea is acceptable.
+","Use crypt:
+$hash = crypt(""somevaluetohash"", $uniqueid);
+
+The unique id is a salt so you can generate different values depending on the id. So if one user had a password of ""somevaluetohash"" and another user had the same, the ending hash wouldn't be the same.
+","1596","<php><hash><cryptographic-hash-function>","2","2","3","2010-07-05 09:26:50","3178212","7","","153015","","2010-07-05 09:26:50","2010-07-05 08:41:28",""
+"3178109","How to generate a hash string with some special rules in PHP?","I'm working on a project where I need to use some hash function to make a hash string. This hash string should be unique consists of 6 to 13 characters (fixed length).
+I use a database to store data, so for each record, I have a unique ID. I want to use this unique ID to make a hash string ( to achieve uniqueness of resulted hash string).
+I need this hash string to consists of only valid characters ( 0-9 a-z A-Z).
+Which hash function should I use to achieve this goal? How can I generate such hash strings?
+Added Later: I want to generate this string and pass it to user, so he can come back later to edit the entry. any other idea is acceptable.
+","Does it really need to be a cryptographic checksum? Or is a simpler checksum suitable? Is the database-provided primary key itself not suitable?
+You've got lots of options, from the simplest crc32 to most-advanced sha512.
+But if you're doing this for some specific application (such as filesystem hashing, or finding nearby objects using some metrics), then you're going to have to specify more of your problem.
+","1596","<php><hash><cryptographic-hash-function>","2","0","3","2010-07-05 09:26:50","3178212","7","","153015","","2010-07-05 09:26:50","2010-07-05 08:41:28",""
+"15820699","What is the best cryptographic hash function that generates 16-bit hashes values in openssl?","I was thinking of just using SHA256 and then using only the first two bytes of the result. Is there anything wrong with this approach?
+NOTE: The concern here is not malicious attacks, but to ensure the best possible protection against random bit flips.
+","Any hash that satisfies the strict avalanche criterion (that is, if any bit is flipped in the input, every bit in the output will be flipped with a probability of 50%) may be used in this way, and that includes every cryptographic hash in common use, including SHA512. There are security implications to using very short hashes, but if they really aren't relevant, as you claim, you're free to select the fastest hash available (probably MD5).
+Since short hashes will be particularly vulnerable to the birthday paradox, though, consider using longer hashes anyway. If you're generating so many hashes that 16 bits versus 256 bits is significant, you will run into duplicates even without malicious attackers.
+","1405","<c><openssl><sha><sha256><cryptographic-hash-function>","2","2","1","2013-04-04 20:40:23","15821277","11","2","810671","","2013-04-04 20:19:30","2013-04-04 20:05:24",""
+"3158334","Does sha-1 ever produce collisions for input messages less than 160bits?","I have a 128bit ID that I want to perform a one way hash on, but I don't want to ever get the same digest for an input message. Does anyone know if sha-1, or an alternative, is guaranteed not to produce collisions for the set of messages less than its output digest size? This is at least theoretically possible...
+I also considered using RSA, and discarding the private key to give me a one-way encrypt, but I need to store the result in a 32 char DB field, and the encryption schemes available to me don't produce anything small enough.
+Any suggestions of another way of producing a deterministic, non-reversable and collision free transform of the original value are welcome.
+","Cryptographic hashes give a very good approximation of a random number for a given input. So how many random hashes do you need in a room until you get the same 160 bits? It about the square root (disclaimer: I am not a statistician). So you should expect to see clashes at around 80-bits.
+I guess practicalities mean you should know when cosmic rays will be a bigger problem than collisions.
+","1315","<java><hash><rsa><sha1><cryptographic-hash-function>","14","7","9","2019-05-28 21:03:13","","2","","2224584","","2019-05-28 21:03:13","2010-07-01 13:42:49",""
+"3158334","Does sha-1 ever produce collisions for input messages less than 160bits?","I have a 128bit ID that I want to perform a one way hash on, but I don't want to ever get the same digest for an input message. Does anyone know if sha-1, or an alternative, is guaranteed not to produce collisions for the set of messages less than its output digest size? This is at least theoretically possible...
+I also considered using RSA, and discarding the private key to give me a one-way encrypt, but I need to store the result in a 32 char DB field, and the encryption schemes available to me don't produce anything small enough.
+Any suggestions of another way of producing a deterministic, non-reversable and collision free transform of the original value are welcome.
+","
+Does anyone know if sha-1, or an
+  alternative, is guaranteed not to
+  produce collisions
+
+Hash functions were designed not to produce collisions, but nothing is ""guaranteed."" On the contrary, it is guaranteed that there WILL be collisions, because the message space is practically indefinite, while you have a limited number of possible hashes.
+SHA-1 however has been proven to be collision-resistant, and that's the best you can hope for.
+","1315","<java><hash><rsa><sha1><cryptographic-hash-function>","14","2","9","2019-05-28 21:03:13","","2","","2224584","","2019-05-28 21:03:13","2010-07-01 13:42:49",""
+"3158334","Does sha-1 ever produce collisions for input messages less than 160bits?","I have a 128bit ID that I want to perform a one way hash on, but I don't want to ever get the same digest for an input message. Does anyone know if sha-1, or an alternative, is guaranteed not to produce collisions for the set of messages less than its output digest size? This is at least theoretically possible...
+I also considered using RSA, and discarding the private key to give me a one-way encrypt, but I need to store the result in a 32 char DB field, and the encryption schemes available to me don't produce anything small enough.
+Any suggestions of another way of producing a deterministic, non-reversable and collision free transform of the original value are welcome.
+","Your ID is unique and 128 bits.
+Your comments explain that you cannot use the ID as-is.
+You need it to be unique, not just probably unique.  Therefore, you cannot use a hash.
+You cannot have both worlds - you cannot have a 1:1 mapping that is not reversible.  Its an impossibility.
+Encrypting - a bijective operation, so there'll be no collisions - IDs with a secret key will make reversing the ID to determine its original value very hard.
+AES has a nice block length of 128 bits which will generate 128 bits output from your 128 bits of input, is faster than old algorithms (!) and is widely available for most platforms and languages.  I suggest you use AES for your purpose.
+","1315","<java><hash><rsa><sha1><cryptographic-hash-function>","14","3","9","2019-05-28 21:03:13","","2","","2224584","","2019-05-28 21:03:13","2010-07-01 13:42:49",""
+"3158334","Does sha-1 ever produce collisions for input messages less than 160bits?","I have a 128bit ID that I want to perform a one way hash on, but I don't want to ever get the same digest for an input message. Does anyone know if sha-1, or an alternative, is guaranteed not to produce collisions for the set of messages less than its output digest size? This is at least theoretically possible...
+I also considered using RSA, and discarding the private key to give me a one-way encrypt, but I need to store the result in a 32 char DB field, and the encryption schemes available to me don't produce anything small enough.
+Any suggestions of another way of producing a deterministic, non-reversable and collision free transform of the original value are welcome.
+","I don't know what hash functions avoid collisions but, if you can't find the answer here, a good starting point might be Perfect Hash Function on Wikipedia. From that page:
+
+A perfect hash function for a set S is
+  a hash function that maps distinct
+  elements in S to distinct integers,
+  with no collisions.
+
+There's a number of links to more information on that page that you may find useful.
+That being said, can you say why you need a perfect has function? It may be that there are other ways to accomplish what you want to without needing that property, and someone here may be able to make a suggestion.
+","1315","<java><hash><rsa><sha1><cryptographic-hash-function>","14","1","9","2019-05-28 21:03:13","","2","","2224584","","2019-05-28 21:03:13","2010-07-01 13:42:49",""
+"3158334","Does sha-1 ever produce collisions for input messages less than 160bits?","I have a 128bit ID that I want to perform a one way hash on, but I don't want to ever get the same digest for an input message. Does anyone know if sha-1, or an alternative, is guaranteed not to produce collisions for the set of messages less than its output digest size? This is at least theoretically possible...
+I also considered using RSA, and discarding the private key to give me a one-way encrypt, but I need to store the result in a 32 char DB field, and the encryption schemes available to me don't produce anything small enough.
+Any suggestions of another way of producing a deterministic, non-reversable and collision free transform of the original value are welcome.
+","Isn't the point of a one-way hash that you can't (in general) recover the original data from the hashed value?  So why would someone designing a hash function go out of their way to prevent collisions for small inputs?
+Instead, it looks like you want to obscure the data, which is fine for some purposes.  If it's not practical to use public key encryption, you might as well write your own function.
+","1315","<java><hash><rsa><sha1><cryptographic-hash-function>","14","0","9","2019-05-28 21:03:13","","2","","2224584","","2019-05-28 21:03:13","2010-07-01 13:42:49",""
+"3158334","Does sha-1 ever produce collisions for input messages less than 160bits?","I have a 128bit ID that I want to perform a one way hash on, but I don't want to ever get the same digest for an input message. Does anyone know if sha-1, or an alternative, is guaranteed not to produce collisions for the set of messages less than its output digest size? This is at least theoretically possible...
+I also considered using RSA, and discarding the private key to give me a one-way encrypt, but I need to store the result in a 32 char DB field, and the encryption schemes available to me don't produce anything small enough.
+Any suggestions of another way of producing a deterministic, non-reversable and collision free transform of the original value are welcome.
+","According to this article http://www.debian-administration.org/users/dkg/weblog/48, 
+
+US gov't federal agencies have been
+  directed to cease all reliance on
+  SHA-1 by the end of 2010
+
+However, as far as I know no collision has been found yet , which means , even people which have tried really hard haven't found any collisions. So it seems reasonable to assume that no collision happen (if you are not dealing with high-security data) 
+","1315","<java><hash><rsa><sha1><cryptographic-hash-function>","14","0","9","2019-05-28 21:03:13","","2","","2224584","","2019-05-28 21:03:13","2010-07-01 13:42:49",""
+"3158334","Does sha-1 ever produce collisions for input messages less than 160bits?","I have a 128bit ID that I want to perform a one way hash on, but I don't want to ever get the same digest for an input message. Does anyone know if sha-1, or an alternative, is guaranteed not to produce collisions for the set of messages less than its output digest size? This is at least theoretically possible...
+I also considered using RSA, and discarding the private key to give me a one-way encrypt, but I need to store the result in a 32 char DB field, and the encryption schemes available to me don't produce anything small enough.
+Any suggestions of another way of producing a deterministic, non-reversable and collision free transform of the original value are welcome.
+","For sufficiently large bit sizes, I think discrete exponentiation is a 1:1 function but reversal is computationally infeasible.  I'm not sure how ""large"" is required though.  Code for an unusably slow (but conceptually understandable) implementation:
+
+unsigned long spin_once(unsigned long dat)
+{
+  if (dat & 1)
+    return (dat >> 1);
+  return (dat >> 1) ^ SomeMagicNumber;
+}
+
+unsigned long hash(unsigned long dat)
+{
+  unsigned long i,ret;
+
+  if (dat == 0xFFFFFFFF)
+    return 0;
+  ret = 1;
+  for (i=0; i < dat; i++)
+    ret = spin_once(ret);
+}
+This program would take billions of steps to compute the hash for many values of dat, but with trickier code the job can be done in reasonable time.  A 32-bit hash is cryptographically worthless, of course, but the approach can be readily extended to any size.
+","1315","<java><hash><rsa><sha1><cryptographic-hash-function>","14","1","9","2019-05-28 21:03:13","","2","","2224584","","2019-05-28 21:03:13","2010-07-01 13:42:49",""
+"3158334","Does sha-1 ever produce collisions for input messages less than 160bits?","I have a 128bit ID that I want to perform a one way hash on, but I don't want to ever get the same digest for an input message. Does anyone know if sha-1, or an alternative, is guaranteed not to produce collisions for the set of messages less than its output digest size? This is at least theoretically possible...
+I also considered using RSA, and discarding the private key to give me a one-way encrypt, but I need to store the result in a 32 char DB field, and the encryption schemes available to me don't produce anything small enough.
+Any suggestions of another way of producing a deterministic, non-reversable and collision free transform of the original value are welcome.
+","If you want to compute a secret permutation from 128 bits to 128 bits, one simple solution is to use a 128-bit block cipher like AES with a fixed but secret key. You must, of course, be able to keep the key secret forever or you've got nothing. 
+","1315","<java><hash><rsa><sha1><cryptographic-hash-function>","14","5","9","2019-05-28 21:03:13","","2","","2224584","","2019-05-28 21:03:13","2010-07-01 13:42:49",""
+"3158334","Does sha-1 ever produce collisions for input messages less than 160bits?","I have a 128bit ID that I want to perform a one way hash on, but I don't want to ever get the same digest for an input message. Does anyone know if sha-1, or an alternative, is guaranteed not to produce collisions for the set of messages less than its output digest size? This is at least theoretically possible...
+I also considered using RSA, and discarding the private key to give me a one-way encrypt, but I need to store the result in a 32 char DB field, and the encryption schemes available to me don't produce anything small enough.
+Any suggestions of another way of producing a deterministic, non-reversable and collision free transform of the original value are welcome.
+","Hashing is ""unlikely"" to produce any duplicates, but there are no guarantees.  On the
+other hand, any symmetric encryption scheme will produce 128 bits out for 128 bits in,
+and guarantee no duplicates.
+On the other hand, if you are depending on the hashes being unique, my intuition is you're
+doing something wrong.  If you're using hashes to obfuscate passwords for example, you
+have to be careful that you don't make the hashed password the de facto password.
+","1315","<java><hash><rsa><sha1><cryptographic-hash-function>","14","0","9","2019-05-28 21:03:13","","2","","2224584","","2019-05-28 21:03:13","2010-07-01 13:42:49",""
+"16201292","Python Tornado: Is this secure?","I'm a bit of a noob here, so I'm trying to figure out some basics about web security. I have a very basic Tornado server running, and while it's only for use by me, I want to make sure I'm not making any obvious security mistakes.
+1) Every handler except the login handler is decorated by @tornado.web.authenticated. Could non-authenticated users submit to, e.g., my AJAX handler, etc? (i.e. how much do I have to worry about them?)
+2) Here's my login and authentication deal:
+def do_auth(name, password):
+  with open(auth_file) as f:
+    lines = f.readlines()
+  for l in lines:
+    u,s,h = l.strip().split(':')
+    if name == u:
+      s5 = hashlib.sha512()
+      s5.update(s.decode('hex'))
+      s5.update(password)
+      if h == s5.hexdigest():
+        return True
+  return False
+
+class LoginHandler(BaseHandler):
+  def get(self):
+    self.write('<html><body><form action=""/login"" method=""post"">'
+               'Name: <input type=""text"" name=""name""><br />'
+               'Password: <input type=""password"" name=""password""><br />'
+               '<input type=""submit"" value=""Sign in"">'
+               '</form></body></html>')
+
+  def post(self):
+    if do_auth(self.get_argument(""name""), self.get_argument(""password"")):
+      self.set_secure_cookie(""user"", self.get_argument(""name""))
+      self.redirect(""/"")
+    else:
+      self.redirect(""/login"")
+
+The point is that untrusted input is being used only in python's urllib.sha512.update() function and for a string comparison. Is this ""secure""? [Note: the auth file was made by hand, no functionality in the code to change it.]
+3) Generally speaking, what other things should I be worried about?
+","Let me try and answer some of this:
+(1) 
+
+
+Every handler except the login handler is decorated by @tornado.web.authenticated. Could non-authenticated users submit to, e.g.my AJAX handler
+
+
+If your AJAX handler is decorated with @tornado.web.authenticated then the user will have to be logged in to call it. 
+If it is not decorated it is accessible by anyone and you make the data publicly viewable and or writeable. Publicly viewable may be ok but publicly writable is probably bad. It depends what your data is.
+(2) You dont need to write your own do_auth() function just a 
+def get_login_url(self):
+        return u""/login""
+
+function to point to your login page
+","1152","<python-2.7><security><tornado><cryptographic-hash-function>","1","0","1","2013-04-26 13:06:48","","0","","","","","2013-04-24 20:11:49",""
+"6475800","Using a ""slow"" hash function with fewer iterations vs. a ""fast"" one with more?","Any benefit to using a slower hash function with fewer iterations vs. a fast one with more?  Assuming you are attempting to protect a password..
+","You want something that's a better hash. And that's not necessarily received by more iterations -- the algorithm itself has to be better.
+","1151","<hash><cryptographic-hash-function>","3","0","2","2011-07-10 18:41:43","","0","","304410","","2011-06-25 04:50:25","2011-06-25 04:27:50",""
+"6475800","Using a ""slow"" hash function with fewer iterations vs. a ""fast"" one with more?","Any benefit to using a slower hash function with fewer iterations vs. a fast one with more?  Assuming you are attempting to protect a password..
+","when protecting password simply use good hash function (for example SHA2). Good reference is NIST Recommendation for Applications Using Approved Hash Algorithms. 
+when its about ""proof of work"" you may consider multiple hashing
+","1151","<hash><cryptographic-hash-function>","3","0","2","2011-07-10 18:41:43","","0","","304410","","2011-06-25 04:50:25","2011-06-25 04:27:50",""
+"3727689","Client-side hashing/salting over HTTPS","I'm wondering what the serious issues are with the following setup:
+Username/password login scheme
+Javascript/ajax requests the salt value from the server (we have established in previous questions salt is not a secret value)
+Javascript preforms an SHA1 (or otherwise) of the password and salt.
+Javascript/ajax return the hash to the server
+The server applies another salt/hash on-top of the the one sent via ajax.
+Transactions are over HTTPS.
+I'm concerned about problems that may exist but can't convince myself that this is that bad of a setup. Assume that all users need javascript enabled as jQuery is heavily used on the site. It's basically attempting to add an additional layer of security to the plain-text of a password.
+","This doesn't add any additional security.  The JavaScript code is present in the client, so the hashing algorithm is known.  You gain nothing from doing a client-side hash in this case.
+Also, there's no reason why the client should know about the hashing salt.  It actually should be a secret value, especially if you're using a shared salt.
+","964","<javascript><https><login-script><cryptographic-hash-function>","0","1","5","2015-08-30 13:55:45","3727902","0","","","","","2010-09-16 14:31:48",""
+"3727689","Client-side hashing/salting over HTTPS","I'm wondering what the serious issues are with the following setup:
+Username/password login scheme
+Javascript/ajax requests the salt value from the server (we have established in previous questions salt is not a secret value)
+Javascript preforms an SHA1 (or otherwise) of the password and salt.
+Javascript/ajax return the hash to the server
+The server applies another salt/hash on-top of the the one sent via ajax.
+Transactions are over HTTPS.
+I'm concerned about problems that may exist but can't convince myself that this is that bad of a setup. Assume that all users need javascript enabled as jQuery is heavily used on the site. It's basically attempting to add an additional layer of security to the plain-text of a password.
+","You're not gaining anything. There's no point to a salt if Joe Public can see it by clicking View > Source, and the old maxim about never trusting client input goes double for password hashing.
+If you really want to increase security, use a SHA-2 based hash (SHA-224/256/384/512), as SHA-1 has potential vulnerabilities. NIST no longer recommends SHA-1 for applications that are vulnerable to collision attacks (like password hashes).
+","964","<javascript><https><login-script><cryptographic-hash-function>","0","0","5","2015-08-30 13:55:45","3727902","0","","","","","2010-09-16 14:31:48",""
+"3727689","Client-side hashing/salting over HTTPS","I'm wondering what the serious issues are with the following setup:
+Username/password login scheme
+Javascript/ajax requests the salt value from the server (we have established in previous questions salt is not a secret value)
+Javascript preforms an SHA1 (or otherwise) of the password and salt.
+Javascript/ajax return the hash to the server
+The server applies another salt/hash on-top of the the one sent via ajax.
+Transactions are over HTTPS.
+I'm concerned about problems that may exist but can't convince myself that this is that bad of a setup. Assume that all users need javascript enabled as jQuery is heavily used on the site. It's basically attempting to add an additional layer of security to the plain-text of a password.
+","All that effort of passing salts and hashes between the client and server is already built into the underlying HTTPS/SSL protocol. I would be very surprised if a security layer in javascript is going to help very much. I recommend keeping it simple and use plaintext over SSL on the client-side. Worry about encryption on the server-side.
+","964","<javascript><https><login-script><cryptographic-hash-function>","0","2","5","2015-08-30 13:55:45","3727902","0","","","","","2010-09-16 14:31:48",""
+"3727689","Client-side hashing/salting over HTTPS","I'm wondering what the serious issues are with the following setup:
+Username/password login scheme
+Javascript/ajax requests the salt value from the server (we have established in previous questions salt is not a secret value)
+Javascript preforms an SHA1 (or otherwise) of the password and salt.
+Javascript/ajax return the hash to the server
+The server applies another salt/hash on-top of the the one sent via ajax.
+Transactions are over HTTPS.
+I'm concerned about problems that may exist but can't convince myself that this is that bad of a setup. Assume that all users need javascript enabled as jQuery is heavily used on the site. It's basically attempting to add an additional layer of security to the plain-text of a password.
+","As always: be very careful about designing cryptographic protocols yourself.
+But that being said, I can see the advantage in the scheme. It will protect against the password being revealed through a man-in-the-middle-attack and it will ensure that the server never sees the actual password, thus preventing some inside attacks. On the other hand it does not protect against man-in-the-browser, fishing etc.
+You might want to read through RFC 2617 about HTTP Digest access authentication. That scheme is similar to what you propose.
+","964","<javascript><https><login-script><cryptographic-hash-function>","0","3","5","2015-08-30 13:55:45","3727902","0","","","","","2010-09-16 14:31:48",""
+"3727689","Client-side hashing/salting over HTTPS","I'm wondering what the serious issues are with the following setup:
+Username/password login scheme
+Javascript/ajax requests the salt value from the server (we have established in previous questions salt is not a secret value)
+Javascript preforms an SHA1 (or otherwise) of the password and salt.
+Javascript/ajax return the hash to the server
+The server applies another salt/hash on-top of the the one sent via ajax.
+Transactions are over HTTPS.
+I'm concerned about problems that may exist but can't convince myself that this is that bad of a setup. Assume that all users need javascript enabled as jQuery is heavily used on the site. It's basically attempting to add an additional layer of security to the plain-text of a password.
+","I'll 100% disagree with the accepted answer and say that under no circumstances should an original password ever Ever EVER leave the client. It should always be salted and hashed. Always, without exception.
+Two reasons...
+. The client should not be relying that all the server components and internal networks are TSL. It is quite common for the TSL endpoint to be a load balancing reverse proxy, which communicates with app servers using plaintext because devops can't be bothered to generate server certs for all their internal servers.
+. Many users are pathologically inclined to use a common password for all of their services. The fact that a server has plaintext passwords, even if only in memory, makes it an attractive target for external attack.
+","964","<javascript><https><login-script><cryptographic-hash-function>","0","0","5","2015-08-30 13:55:45","3727902","0","","","","","2010-09-16 14:31:48",""
+"15491100","before and after using a cryptographic hash function","After reviewing multiple online references for generating Java MD5 and SHA* hashes, i have noticed that the plain-text (String of File) undergoes certain prep before & after it is fed to the Digest object for generating hashes.
+Specifically, data is first converted to byte-array, then fed to the digest, then the output hash is converted to hexadecimal stream.
+Why all these byte and hexadecimal conversions ? 
+PS: I guess the answer is tied to the how Java and the Digest object do their business, and my motive/s in asking this question is to understand this behavior, and possibly obtain references to some documentation/literature that explains this in-depth.
+Danke!
+","The implementation of these hashing algorithms works on bytes, and not something else like string characters. This is why you need to convert everything into byte form.
+","865","<java><hex><bytearray><checksum><cryptographic-hash-function>","3","1","2","2016-06-16 22:19:42","15491161","0","2","","","","2013-03-19 03:41:20",""
+"15491100","before and after using a cryptographic hash function","After reviewing multiple online references for generating Java MD5 and SHA* hashes, i have noticed that the plain-text (String of File) undergoes certain prep before & after it is fed to the Digest object for generating hashes.
+Specifically, data is first converted to byte-array, then fed to the digest, then the output hash is converted to hexadecimal stream.
+Why all these byte and hexadecimal conversions ? 
+PS: I guess the answer is tied to the how Java and the Digest object do their business, and my motive/s in asking this question is to understand this behavior, and possibly obtain references to some documentation/literature that explains this in-depth.
+Danke!
+","There are two parts to this:
+
+Why do we convert a String to a byte array before digesting?
+Why do we convert the digest to hexadecimal?
+
+The first answer is that digests only work on byte arrays. They have no knowledge of Strings, numbers or any other data type. Just bytes. So, we take a String object and convert it into a byte array using some form of text encoding such as UTF-8.
+Note that the encoding is important: I can encode the string ""hello world"" in UTF-8, or UTF-16, or US-ASCII, or any number of other encodings. If I choose UTF-8 it will generate 11 bytes of output (since ""hello world"" is 11 characters long), but UTF-16 will generate 22 bytes of output. These two encodings will produce different digests, so knowing the encoding is vitally important.
+The second answer is that digests are often used in string-based protocols such as HTTP cookies, for storing password hashes in text columns in databases, for adding PGP signatures to email messages and so on.
+Since the digest produces a raw byte array it needs to be re-encoded into something text-friendly. This is why hexadecimal (or, more likely, base-64) is used.
+For example, sticking with the ""hello world"" example, let's say the UTF-8-encoded digest turns into a byte array with the following values: 4 27 125 8 0 22 90 7 (for my mythical 8-byte digest function). If I tried to interpreted that as a UTF-8 string then I'd get a lot of garbage: 0 is not a printable character. Encoding it in hex means I can print it out in a meaningful way, or add it to my PGP email, or whatever.
+Does that make sense?
+","865","<java><hex><bytearray><checksum><cryptographic-hash-function>","3","4","2","2016-06-16 22:19:42","15491161","0","2","","","","2013-03-19 03:41:20",""
+"37921247","Veracode Cryptography issue","Recently we done a static security scan using Veracode on one of the applications.
+The report indicate an issue 
+
+Use of a Broken or Risky Cryptographic Algorithm (CWE ID 327)
+
+It is shown for following code snippet
+byte[] CalculateHash(byte[] publicKey) {
+        SHA1CryptoServiceProvider hashGenerator = new SHA1CryptoServiceProvider();
+        Byte[] hashInArray = new Byte[32];
+        PrivateKey.CopyTo(hashInArray,0);            // Combine public key and private key
+        publicKey.CopyTo(hashInArray,16);
+        return hashGenerator.ComputeHash(hashInArray); // Calculate hash
+    }
+
+In description it describe SHA1 as a weak algorithm.
+I modified the code and used SHA256 instead of SHA1 and performed veracode scanning again but it still show same issue.
+What is an alternative for this? any suggestions? 
+","","836","<c#><sha><veracode><cryptographic-hash-function>","1","","0","2018-11-27 23:29:34","","9","","1510998","","2016-06-20 13:19:27","2016-06-20 11:21:45",""
+"46636078","What is the time complexity for cryptographic hash function?","Let say MD5 or SHA-1? What are the time complexity for both of these? I tried to find it on the internet but it is very limited and all I got is that both of them are O(n). Can anyone further enlighten me? Maybe give me a worst case and best case scenarios? 
+","The MD5 and SHA-1 algorithms - both of which are not cryptographically secure and should never be used any more - are based on the Merkle-Damgard construction. This means that they're built by
+
+starting with a block cipher that takes as input fixed-width block of bits and outputs a fixed-width block of bits of the same size,
+padding the input up to some multiple of the block size using a cryptographically secure padding scheme, and then
+iteratively applying the block cipher to a combination of some number of bits of the input, plus either an initialization value or the output of the previous block cipher.
+
+Because the block cipher works on a fixed-size block of bits, the time complexity of running it is O(1). There are a total of Θ(n) applications of that block cipher (the input is split apart into fixed-sized blocks, so there are Θ(n) of those blocks), and the cost of computing the padding bit is probably O(1) but could potentially be O(n). Overall, this means that the runtime of computing these hash functions is Θ(n), which makes sense because each bit is visited at least once and the work done per bit is constant.
+Block ciphers are typically implemented in a way that cause them to take the exact same amount of time to run on any input combination of bits - or at least, something very close to the same amount of time - to try to make them resistant to timing attacks where the amount of time required to compute the block cipher is used to steal some of the bits. As a result, it would be very unusual if these hash functions took different amounts of time to complete on different inputs of the same size. So independently of the fact that the runtime is Θ(n), you shouldn't expect to see much variation in the wall-clock runtime.
+","818","<security><time-complexity><big-o><cryptographic-hash-function>","0","4","1","2017-10-08 21:14:36","46636122","0","","501557","","2017-10-08 21:14:36","2017-10-08 21:07:50",""
+"41822957","Using SHA 1 Hash in Laravel","I want to hash some strings of character using sha1 in laravel. but no matter what the strings are, they are all returning the same hash. Please, i need to know why it is so, or what am i doing wrong . See below my code:
+$lice = $serial->sname.$serial->company.$serial->effDate.$serial->ltype;
+        //$serial->sname is MTS;
+        //$serial->company is Godowns Technology;
+        //$serial->effDate is 2017-01-24;
+        //$serial->ltype is Trial
+
+        $lice2= sha1($lice);
+        $lice3 = chunk_split($lice2,5,'-');
+        $lice4 =strtoupper($lice3);
+  based on the information above, the $lice4 is always return: 
+DA39A-3EE5E-6B4B0-D3255-BFEF9-56018-90AFD-80709
+
+Please, i need assitance on this
+","All, i did was to ensure that the my varibales were fetched from the form and they were properly targeted. Hence, once this was done, i could concatenate and get the correct hash. 
+ $lice = $request->sname.$request->company.$request->effDate;
+        //$lice = $serial->sname;
+        $lice2= sha1($lice);
+        $lice3 = chunk_split($lice2,5,'-');
+        $lice4 =strtoupper($lice3);
+
+       Serial::create([
+        'sname' => $request->sname,
+        'company' => $request->company,
+        'effDate' => $request->effDate,
+        'ltype' => $request->ltype
+        ]);
+
+","682","<php><laravel><cryptographic-hash-function>","-2","0","1","2017-12-29 05:59:26","","6","","2224584","","2017-12-29 05:59:26","2017-01-24 08:04:43",""
+"52515541","What is difference between CRYPT() and MD5()?","When we use CRYPT() method of any variable.
+$test = 'password';
+
+echo CRYPT($test);
+
+Result
+$1$g9s9ZdtF$sBBiBc4PdljOL4sDLx4CK.
+
+When we use MD5() method of same variable.
+$test = 'password';
+echo MD5($test);
+Result
+5f4dcc3b5aa765d61d8327deb882cf99
+Now, what is difference in both Answer?
+","crypt() is a function that creates password hashes from plaintext and a (randomly generated or provided) salt value. It can use several underlaying hash algorithms like DES, MD5, Blowfish or SHA.
+Using a ""salted"" password means that the same plaintext input does not always produce the same hash. So you can't say ""I've seen this hash before it's the one for 'abc123'"".
+As it's available in libc there are crypt() functions in almost all programming languages and database servers so its very interoperable.
+How secure it is only depends on the hash algorithm you chose (specified in as part of the hash).
+For more information see https://en.wikipedia.org/wiki/Crypt_(C)
+","651","<php><passwords><md5><crypt><cryptographic-hash-function>","0","0","1","2019-05-28 20:41:19","","3","","2224584","","2019-05-28 20:41:19","2018-09-26 10:25:42",""
+"3911008","Collate Hash Function","In the local object there is a collate facet.
+The collate facet has a hash method that returns a long.
+http://www.cplusplus.com/reference/std/locale/collate/hash/
+Two questions:
+
+Does anybody know what hashing method is used.
+I need a 32bit value.
+If my long is longer than 32 bits, does anybody know about techniques for folding the hash into a shorter version. I can see that if done incorrectly that folding could generate lots of clashes (and though I can cope with clashes as I need to take that into account anyway, I would prefer if they were minimized).
+
+Note:
+I can't use C++0x features
+Boost may be OK.
+","No, nobody really knows -- it can vary from one implementation to another. The primary requirements are (N3092, §20.8.15):
+For all object types Key for which there exists a specialization hash, the instantiation hash shall:
+
+satisfy the Hash requirements (20.2.4), with Key as the function call argument type, the DefaultConstructible requirements (33), the CopyAssignable requirements (37),
+be swappable (20.2.2) for lvalues,
+provide two nested types result_type and argument_type which shall be synonyms for size_t and Key, respectively,
+satisfy the requirement that if k1 == k2 is true, h(k1) == h(k2) is also true, where h is an object of type hash and k1 and k2 are objects of type Key.
+
+and (N3092, §20.2.4):
+A type H meets the Hash requirements if:
+
+it is a function object type (20.8),
+it satisifes the requirements of CopyConstructible and Destructible (20.2.1),
+the expressions shown in the following table are valid and have the indicated semantics, and
+it satisfies all other requirements in this subclause.
+
+§20.8.15 covers the requirements on the result of hashing, §20.2.4 on the hash itself. As you can see, however, both are pretty general. The table that's mentioned basically covers three more requirements:
+
+A hash function must be ""pure"" (i.e., the result depends only on the input, not any context, history, etc.)
+The function must not modify the argument that's passed to it, and
+It must not throw any exceptions.
+
+Exact algorithms definitely are not specified though -- and despite the length, most of the requirements above are really just stating requirements that (at least to me) seem pretty obvious. In short, the implementation is free to implement hashing nearly any way it wants to.
+","646","<c++><local><hash-function><cryptographic-hash-function>","2","4","2","2010-10-12 08:46:56","3911063","0","","330565","","2010-10-12 08:46:56","2010-10-12 01:00:34",""
+"3911008","Collate Hash Function","In the local object there is a collate facet.
+The collate facet has a hash method that returns a long.
+http://www.cplusplus.com/reference/std/locale/collate/hash/
+Two questions:
+
+Does anybody know what hashing method is used.
+I need a 32bit value.
+If my long is longer than 32 bits, does anybody know about techniques for folding the hash into a shorter version. I can see that if done incorrectly that folding could generate lots of clashes (and though I can cope with clashes as I need to take that into account anyway, I would prefer if they were minimized).
+
+Note:
+I can't use C++0x features
+Boost may be OK.
+","If the implementation uses a reasonable hash function, there should be no bits in the hash value that have any special correlation with the input. So if the hash function gives you 64 ""random"" bits, but you only want 32 of them, you can just take the first/last/... 32 bits of the value as you please. Which ones you take doesn't matter since every bit is as random as the next one (that's what makes a good hash function).
+So the simplest and yet completely reasonable way to get a 32-bit hash value would be:
+int32_t value = hash(...);
+
+(Of course this collapses groups of 4 billion values down to one, which looks like a lot, but that can't be avoided if there are four billion times as many source values as target values.)
+","646","<c++><local><hash-function><cryptographic-hash-function>","2","0","2","2010-10-12 08:46:56","3911063","0","","330565","","2010-10-12 08:46:56","2010-10-12 01:00:34",""
+"36805327","MD5 acting different in SQL database and in PHP script","Recently I have created a script that handles login and register for my Game that uses http_get method to update stats. I have managed to create everything successfully, but there is a problem. When a user registers, it inserts different md5 string that PHP scripts generated and because of this, I cannot compare passwords.
+This is the way I insert md5 string into a database:
+$pw = md5($password);
+    $insert = mysqli_query($connect, ""INSERT INTO Accounts (username, password, email,reg_ip, wins, looses, experience) VALUES ('$username', '$pw', '$email',  '$reg_ip', '0','0', '0')"");
+    if($insert) {
+            echo ""account successfully created""; 
+
+        } 
+        else {
+            echo ""error"";
+        }
+
+And this is the way I check for passwords:
+if($p['password'] == md5($password)) {
+                echo ""login was successful!"";
+            }
+            else {
+                echo ""incorrect password"";
+            }
+
+This is the md5 string that is in the database when user registers: (un-encrypted string is: pocakaj123)
+54e8850ba5eca655854ddf1b503943
+
+and this is the generated string when I echo md5($password).
+54e8850ba5eca655854ddf1b50394348
+
+","This is due to the length of your field in your database. You need to increase the length so that the whole string can fit.
+Currently, it only accepts 30 characters so the remaining gets truncated:
+54e8850ba5eca655854ddf1b503943
+
+You need to increase the length to at least 32 to fit the whole string:
+54e8850ba5eca655854ddf1b50394348
+
+
+Note:
+md5() is not a secure way to hash passwords, a better way is bcrypt() or instead use PHP's password hashing functions, password_hash().
+Reason that md5() is not secure:
+
+Hashing algorithms such as MD5, SHA1 and SHA256 are designed to be very fast and efficient. With modern techniques and computer equipment, it has become trivial to ""brute force"" the output of these algorithms, in order to determine the original input.
+
+Referenced from http://php.net/manual/en/faq.passwords.php.
+","635","<php><mysql><md5><cryptographic-hash-function>","0","6","1","2018-10-06 10:05:00","","4","","472495","","2018-10-06 10:05:00","2016-04-23 00:47:35",""
+"31021488","Why did Git and Mercurial use SHA1","Both Git and Mercurial use SHA1 extensively throughout the application.
+Why was SHA1 chosen rather then another Cryptographic hash function? 
+Both Git and mercurial are both 10 years old. What alternatives would be better suited now?
+","","566","<git><version-control><mercurial><sha><cryptographic-hash-function>","2","","0","2015-06-24 08:28:31","","9","","","","","2015-06-24 08:28:31","2015-06-24 13:27:42"
+"36576813","any way to Decrypt MD5CryptoServiceProvider","hey guys i wanted to know to create a decrypt function for this crypt function :
+    public static string CreateHash(string unHashed)
+    {
+        System.Security.Cryptography.MD5CryptoServiceProvider x = new System.Security.Cryptography.MD5CryptoServiceProvider();
+        byte[] data = System.Text.Encoding.ASCII.GetBytes(unHashed);
+        data = x.ComputeHash(data);
+        return System.Text.Encoding.ASCII.GetString(data);
+    }
+
+there is any way to decrypt function ? 
+hashes i got is like : ??????7hYkr?4??w
+","MD5 is a hash function.
+So it's only one way: there is no practical way to decrypt it.
+Read the introduction of the wikipedia article about cryptographic hash functions to understand how those behave.
+However, if you have passwords encrypted with this function, and you want to check that a user provided password matches, you can encrypt the user provided string, and compare the result with the encrypted blob that is in your database (which is the most common use for those function).
+","554","<c#><function><cryptographic-hash-function>","0","3","1","2016-04-12 14:56:55","","0","","2224584","","2016-04-12 14:56:55","2016-04-12 14:49:21",""
+"51690019","Python 3.6 equivalent of md5 digest() method?","I'am having trouble in achieving the same results of md5 digest() method from Python 2.7 in Python 3.6.
+Python 2.7:
+import md5
+
+encryption_base  = 'cS35jJYp15kjQf01FVqA7ubRaNOXKPmYGRbLUiimX0g3frQhzOZBmTSni4IEjHLWYMMioGaliIz5z8u2:abcdefghkmnopqrstuvwxyz:4'
+digest = md5.new (encryption_base).digest()
+print(digest)
+
+#T┼Çƒ×ÞRK(M<¶┤#  ²
+
+Python 3.6:
+from hashlib import md5
+
+encryption_base  = 'cS35jJYp15kjQf01FVqA7ubRaNOXKPmYGRbLUiimX0g3frQhzOZBmTSni4IEjHLWYMMioGaliIz5z8u2:abcdefghkmnopqrstuvwxyz:4'
+digest = md5(encryption_base.encode()).digest()
+print(digest)
+
+#b'T\xc5\x80\x9f\x9e\xe8RK(M<\xf4\xb4#\t\xfd'
+
+How can I get the same string as in the Python 2.7 result? .hexdigest is not the case for this also.
+","You have the exact same result, a bytestring. The only difference is that in Python 3 printing a bytestring gives you a debugging-friendly representation, not the raw bytes. That's because the raw bytes are not necessarily printable and print() needs Unicode strings.
+If you must have the same output, write the bytes directly to the stdout buffer, bypassing the Unicode TextIOWrapper() that takes care of encoding text to the underlying locale codec:
+import sys
+
+digest = md5(encryption_base.encode('ASCII')).digest()
+sys.stdout.buffer.write(digest + b'\n')
+
+Note that you must ensure that you define your encryption_base value as a bytes value too, or at least encode it to the same codec, ASCII, like I did above. 
+Definining it as a bytestring gives you the same value as in Python 2 without encoding:
+encryption_base  = b'cS35jJYp15kjQf01FVqA7ubRaNOXKPmYGRbLUiimX0g3frQhzOZBmTSni4IEjHLWYMMioGaliIz5z8u2:abcdefghkmnopqrstuvwxyz:4'
+
+When you use str.encode() without explicitly setting an argument, you are encoding to UTF-8. IF your encryption_base string only consists of ASCII codepoints, the result would be the same, but not if you have any Latin-1 or higher codepoints in there too. Don't conflate bytes with Unicode codepoints! See https://nedbatchelder.com/text/unipain.html to fully understand the difference and how that difference applies to Python 2 and 3.
+","273","<python><python-3.x><python-2.7><md5><cryptographic-hash-function>","-1","3","1","2019-05-28 20:42:05","51690046","1","","2224584","","2019-05-28 20:42:05","2018-08-04 22:32:39",""
+"21205427","how to convert function from VB.net to C#?","I have this function in VB.net and I am trying to convert this code from VB to C#.
+Function HashEncode(strSecret)
+' Function takes an ASCII string less than 2^61 characters long and 
+' one way hash encrypts it using 160 bit encryption into a 40 digit hex value.
+' The encoded hex value cannot be decoded to the original string value.
+'
+' This is the only function that you need to call for encryption.
+'
+' Written By: Mark G. Jager
+' Written Date: 8/10/2000
+'
+' Free to distribute as long as code is not modified, and header is kept intact
+'
+' The author makes no warranties as to the validity, and/or authenticity of this code.
+' You may use any code found herein at your own risk.
+' This code was written to follow as closely as possible the standards found in
+' Federal Information Processing Standards Publication (FIPS PUB 180-1)
+' http://csrc.nist.gov/fips/fip180-1.txt -- Secure Hash Standard SHA-1
+'
+' This code is for private use only, and the security and/or encryption of the resulting
+' hexadecimal value is not warrented or gaurenteed in any way.
+'
+
+Dim strEncode, strH(4)
+Dim intPos
+
+
+If len(strSecret) = 0 or len(strSecret) >= 2^61 then
+    HashEncode = ""0000000000000000000000000000000000000000""
+    exit function
+end if
+
+
+'Initial Hex words are used for encoding Digest.  
+'These can be any valid 8-digit hex value (0 to F)
+strH(0) = ""FB0C14C2""
+strH(1) = ""9F00AB2E""
+strH(2) = ""991FFA67""
+strH(3) = ""76FA2C3F""
+strH(4) = ""ADE426FA""
+
+For intPos = 1 to len(strSecret) step 56
+
+    strEncode = Mid(strSecret, intPos, 56) 'get 56 character chunks
+    strEncode = WordToBinary(strEncode) 'convert to binary
+    strEncode = PadBinary(strEncode) 'make it 512 bites
+    strEncode = BlockToHex(strEncode) 'convert to hex value
+
+    'Encode the hex value using the previous runs digest
+    'If it is the first run then use the initial values above
+    strEncode = DigestHex(strEncode, strH(0), strH(1), strH(2), strH(3), strH(4))
+
+    'Combine the old digest with the new digest
+    strH(0) = HexAdd(left(strEncode, 8), strH(0))
+    strH(1) = HexAdd(mid(strEncode, 9, 8), strH(1))
+    strH(2) = HexAdd(mid(strEncode, 17, 8), strH(2))
+    strH(3) = HexAdd(mid(strEncode, 25, 8), strH(3))
+    strH(4) = HexAdd(right(strEncode, 8), strH(4))
+
+Next
+
+'This is the final Hex Digest
+HashEncode = strH(0) & strH(1) & strH(2) & strH(3) & strH(4)
+
+End Function
+
+I have converted it in C# as
+public string HashEncode(string strSecret)
+{
+    string strEncode;
+    string[] strH = new string [4];
+    int intPos;
+
+    if (strSecret.Length == 0 || strSecret.Length >= Int64.MaxValue)
+    {
+        return ""0000000000000000000000000000000000000000"";
+        //break;
+    }
+
+    //Initial Hex words are used for encoding Digest.  
+    //These can be any valid 8-digit hex value (0 to F)
+    strH[0] = ""FB0C14C2"";
+    strH[1] = ""9F00AB2E"";
+    strH[2] = ""991FFA67"";
+    strH[3] = ""76FA2C3F"";
+    strH[4] = ""ADE426FA"";
+
+    for(intPos = 1; intPos < strSecret.Length; intPos += 56)
+    {
+        strEncode = strSecret.Substring(intPos, strSecret.IndexOf("" "", 56));
+        //strEncode = Mid(strSecret, intPos, 56); //get 56 character chunks
+        strEncode = WordToBinary(strEncode); //convert to binary
+        strEncode = PadBinary(strEncode); //make it 512 bites
+        strEncode = BlockToHex(strEncode); //convert to hex value
+
+        //Encode the hex value using the previous runs digest
+        //If it is the first run then use the initial values above
+        strEncode = DigestHex(strEncode, strH[0], strH[1], strH[2], strH[3], strH[4]);
+
+        //Combine the old digest with the new digest
+        //strH[0] = HexAdd(left(strEncode, 8), strH[0]);
+        //strH[1] = HexAdd(mid(strEncode, 9, 8), strH[1]);
+        //strH[2] = HexAdd(mid(strEncode, 17, 8), strH[2]);
+        //strH[3] = HexAdd(mid(strEncode, 25, 8), strH[3]);
+        //strH[4] = HexAdd(right(strEncode, 8), strH[4]);
+
+        strH[0] = HexAdd(strEncode.Substring(0, 8), strH[0]);
+
+        strH[1] = HexAdd(strEncode.Substring(9, 8), strH[1]);
+        strH[2] = HexAdd(strEncode.Substring(17, 8), strH[2]);
+        strH[3] = HexAdd(strEncode.Substring(25, 8), strH[3]);
+        strH[4] = HexAdd(strEncode.Substring(strEncode.Length - 8,8),strH[4]);
+    }
+    //This is the final Hex Digest
+    return strH[0] + strH[1] + strH[2] + strH[3] + strH[4];
+}
+
+It successfully compiled but not working.
+It gives exception at for loop as 'System.IndexOutOfRangeException was unhandled by user'
+Is anyone help me to solve this problem
+","Your 'for' loop is wrong for a couple of reasons:
+1. the ending condition is incorrect - strSecret.Length has to be included if you start your indexing at 1.
+2. when converting the legacy VB string functions, you have to be aware that they use 1-based indexing, while the .NET methods use 0-based indexing.
+for (int intPos = 1; intPos <= strSecret.Length; intPos += 56)
+{
+
+    strEncode = strSecret.ToString().Substring(intPos - 1, 56); //get 56 character chunks
+    strEncode = WordToBinary(strEncode); //convert to binary
+    strEncode = PadBinary(strEncode); //make it 512 bites
+    strEncode = BlockToHex(strEncode); //convert to hex value
+
+    //Encode the hex value using the previous runs digest
+    //If it is the first run then use the initial values above
+    strEncode = DigestHex(strEncode, strH[0], strH[1], strH[2], strH[3], strH[4]);
+
+    //Combine the old digest with the new digest
+    strH[0] = HexAdd(strEncode.Substring(0, 8), strH[0]);
+    strH[1] = HexAdd(strEncode.Substring(8, 8), strH[1]);
+    strH[2] = HexAdd(strEncode.Substring(16, 8), strH[2]);
+    strH[3] = HexAdd(strEncode.Substring(24, 8), strH[3]);
+    strH[4] = HexAdd(strEncode.Substring(strEncode.Length - 8), strH[4]);
+
+}
+
+You also could use:
+for (int intPos = 0; intPos < strSecret.Length; intPos += 56)
+{
+
+    strEncode = strSecret.ToString().Substring(intPos, 56); //get 56 character chunks
+    ... (rest is identical)
+}
+
+","271","<c#><vb.net><hash><cryptographic-hash-function>","0","1","2","2014-01-18 16:41:03","","7","","2804613","","2014-01-18 16:41:03","2014-01-18 14:29:52",""
+"21205427","how to convert function from VB.net to C#?","I have this function in VB.net and I am trying to convert this code from VB to C#.
+Function HashEncode(strSecret)
+' Function takes an ASCII string less than 2^61 characters long and 
+' one way hash encrypts it using 160 bit encryption into a 40 digit hex value.
+' The encoded hex value cannot be decoded to the original string value.
+'
+' This is the only function that you need to call for encryption.
+'
+' Written By: Mark G. Jager
+' Written Date: 8/10/2000
+'
+' Free to distribute as long as code is not modified, and header is kept intact
+'
+' The author makes no warranties as to the validity, and/or authenticity of this code.
+' You may use any code found herein at your own risk.
+' This code was written to follow as closely as possible the standards found in
+' Federal Information Processing Standards Publication (FIPS PUB 180-1)
+' http://csrc.nist.gov/fips/fip180-1.txt -- Secure Hash Standard SHA-1
+'
+' This code is for private use only, and the security and/or encryption of the resulting
+' hexadecimal value is not warrented or gaurenteed in any way.
+'
+
+Dim strEncode, strH(4)
+Dim intPos
+
+
+If len(strSecret) = 0 or len(strSecret) >= 2^61 then
+    HashEncode = ""0000000000000000000000000000000000000000""
+    exit function
+end if
+
+
+'Initial Hex words are used for encoding Digest.  
+'These can be any valid 8-digit hex value (0 to F)
+strH(0) = ""FB0C14C2""
+strH(1) = ""9F00AB2E""
+strH(2) = ""991FFA67""
+strH(3) = ""76FA2C3F""
+strH(4) = ""ADE426FA""
+
+For intPos = 1 to len(strSecret) step 56
+
+    strEncode = Mid(strSecret, intPos, 56) 'get 56 character chunks
+    strEncode = WordToBinary(strEncode) 'convert to binary
+    strEncode = PadBinary(strEncode) 'make it 512 bites
+    strEncode = BlockToHex(strEncode) 'convert to hex value
+
+    'Encode the hex value using the previous runs digest
+    'If it is the first run then use the initial values above
+    strEncode = DigestHex(strEncode, strH(0), strH(1), strH(2), strH(3), strH(4))
+
+    'Combine the old digest with the new digest
+    strH(0) = HexAdd(left(strEncode, 8), strH(0))
+    strH(1) = HexAdd(mid(strEncode, 9, 8), strH(1))
+    strH(2) = HexAdd(mid(strEncode, 17, 8), strH(2))
+    strH(3) = HexAdd(mid(strEncode, 25, 8), strH(3))
+    strH(4) = HexAdd(right(strEncode, 8), strH(4))
+
+Next
+
+'This is the final Hex Digest
+HashEncode = strH(0) & strH(1) & strH(2) & strH(3) & strH(4)
+
+End Function
+
+I have converted it in C# as
+public string HashEncode(string strSecret)
+{
+    string strEncode;
+    string[] strH = new string [4];
+    int intPos;
+
+    if (strSecret.Length == 0 || strSecret.Length >= Int64.MaxValue)
+    {
+        return ""0000000000000000000000000000000000000000"";
+        //break;
+    }
+
+    //Initial Hex words are used for encoding Digest.  
+    //These can be any valid 8-digit hex value (0 to F)
+    strH[0] = ""FB0C14C2"";
+    strH[1] = ""9F00AB2E"";
+    strH[2] = ""991FFA67"";
+    strH[3] = ""76FA2C3F"";
+    strH[4] = ""ADE426FA"";
+
+    for(intPos = 1; intPos < strSecret.Length; intPos += 56)
+    {
+        strEncode = strSecret.Substring(intPos, strSecret.IndexOf("" "", 56));
+        //strEncode = Mid(strSecret, intPos, 56); //get 56 character chunks
+        strEncode = WordToBinary(strEncode); //convert to binary
+        strEncode = PadBinary(strEncode); //make it 512 bites
+        strEncode = BlockToHex(strEncode); //convert to hex value
+
+        //Encode the hex value using the previous runs digest
+        //If it is the first run then use the initial values above
+        strEncode = DigestHex(strEncode, strH[0], strH[1], strH[2], strH[3], strH[4]);
+
+        //Combine the old digest with the new digest
+        //strH[0] = HexAdd(left(strEncode, 8), strH[0]);
+        //strH[1] = HexAdd(mid(strEncode, 9, 8), strH[1]);
+        //strH[2] = HexAdd(mid(strEncode, 17, 8), strH[2]);
+        //strH[3] = HexAdd(mid(strEncode, 25, 8), strH[3]);
+        //strH[4] = HexAdd(right(strEncode, 8), strH[4]);
+
+        strH[0] = HexAdd(strEncode.Substring(0, 8), strH[0]);
+
+        strH[1] = HexAdd(strEncode.Substring(9, 8), strH[1]);
+        strH[2] = HexAdd(strEncode.Substring(17, 8), strH[2]);
+        strH[3] = HexAdd(strEncode.Substring(25, 8), strH[3]);
+        strH[4] = HexAdd(strEncode.Substring(strEncode.Length - 8,8),strH[4]);
+    }
+    //This is the final Hex Digest
+    return strH[0] + strH[1] + strH[2] + strH[3] + strH[4];
+}
+
+It successfully compiled but not working.
+It gives exception at for loop as 'System.IndexOutOfRangeException was unhandled by user'
+Is anyone help me to solve this problem
+","The code is an implementation of the SHA-1 algorithm, correct? In that case:
+using System.Security.Cryptography;
+using System.Text;
+
+string str = ""foobar"";
+
+byte[] data = Encoding.ASCII.GetBytes(str);
+SHA1 sha = new SHA1Managed();
+byte[] hash = sha.ComputeHash(data);
+
+Console.WriteLine(String.Concat(Array.ConvertAll(hash, x => x.ToString(""X2""))));
+
+Translation complete.
+","271","<c#><vb.net><hash><cryptographic-hash-function>","0","2","2","2014-01-18 16:41:03","","7","","2804613","","2014-01-18 16:41:03","2014-01-18 14:29:52",""
+"55612173","How to convert byte array to string in swift 3","I referred C# code for byte array to string conversion in swift
+System.Text.Encoding.UTF8.GetString(encryptedpassword)
+
+I tried to convert byte array to string by using below few codes:
+(A)
+ let utf8 : [UInt8] = [231, 13, 38, 246, 234, 144, 148, 111, 174, 136, 15, 61, 200, 186, 215, 113,0]
+ let str = NSString(bytes: utf8, length: utf8.count, encoding: String.Encoding.utf8.rawValue)
+ print(""str : \(str)"")
+
+result : getting nil value 
+(B)
+ let datastring = NSString(bytes: chars, length: count, encoding: String.Encoding.utf8.rawValue)
+ print(""string byte data\(chars.map{""\($0)""}.reduce(""""){$0+$1})"")
+
+result : 23113382462341441481111741361561200186215113 (I thought this is not ideal way)
+I searched from last two days and tried other multiple ways but I missed something or doing some mistake .
+Please help me out resolved this issue.
+Referred links:
+how-to-convert-uint8-byte-array-to-string-in-swift
+ how-to-convert-uint8-byte-array-to-string-in-swift 2
+","","270","<arrays><string><swift3><md5><cryptographic-hash-function>","0","","0","2019-05-28 20:42:32","","24","","2224584","","2019-05-28 20:42:32","2019-04-10 12:06:32",""
+"31790901","How to reconstruct hash value to the original format?","I would like to know how I can reconstruct a hash value such as 558f68181d2b0c9d57d41ce7aa36b71d9 to its original format (734).  
+I have used a code in matlab, which provided me with an hash output, but I tried to revers the operation to obtain the original value but no use. I tired converting from hex to binary but no use. 
+Are there any built in functions that can help me obtaining the original value?
+i have used this code : 
+http://uk.mathworks.com/matlabcentral/fileexchange/31272-datahash 
+","In general this is impossible. The whole idea of cryptographical hashes (like SHA-1 used above) is to be as unpredictable as possible. The hash of certain data should always be the same (of course) but it should be really hard to predict which data that resulted in a certain hash.
+If you have a limited amount of values, you could probably create a lookup-table (hash -> data that made it) but this is actually the exact opposite of how they are supposed to be used.
+I think you want to create your own hashing for this problem, where you could inline the data you hash in some particular way.
+","266","<cryptographic-hash-function>","0","0","1","2015-08-03 15:25:18","31791113","9","","","","","2015-08-03 15:14:43",""
+"20793628","Is there an Erlang equivalent to Python's `passlib`?","I'm trying to replicate the functionality of the following Python snippet:
+from passlib.hash import sha512_crypt
+sha512_crypt.encrypt(password, rounds=5000)
+
+But I'm not sure how to do so with Erlang.
+","Disclaimer: I am no crypto expert.
+I assume that CouchDB's password hashing functionality is good enough as it's a big open-source project and lots of eyeballs have seen it... So I use that in my projects.
+It's very easy to extract from CouchDB (results in about 50 lines of code), and the license is OK with you taking bits for use in your own projects. Have a look at couch_passwords:pbkdf2/3
+https://github.com/apache/couchdb/blob/master/src/couchdb/couch_passwords.erl#L53
+","165","<python><erlang><cryptographic-hash-function>","0","1","3","2014-01-10 23:21:31","","3","","168868","","2014-01-10 23:21:31","2013-12-27 01:47:50",""
+"20793628","Is there an Erlang equivalent to Python's `passlib`?","I'm trying to replicate the functionality of the following Python snippet:
+from passlib.hash import sha512_crypt
+sha512_crypt.encrypt(password, rounds=5000)
+
+But I'm not sure how to do so with Erlang.
+","There's a fair amount of crypto in scutil.
+I usually just os:cmd() to a standard crypto tool, instead, because crypto tools need to be very well validated.
+","165","<python><erlang><cryptographic-hash-function>","0","0","3","2014-01-10 23:21:31","","3","","168868","","2014-01-10 23:21:31","2013-12-27 01:47:50",""
+"20793628","Is there an Erlang equivalent to Python's `passlib`?","I'm trying to replicate the functionality of the following Python snippet:
+from passlib.hash import sha512_crypt
+sha512_crypt.encrypt(password, rounds=5000)
+
+But I'm not sure how to do so with Erlang.
+","There are three key-derivation (aka advanced password hashing) algorithms in passlib. At least two of those exist as erlang projects (but not sha512_crypt, although you could code one yourself (DON'T !!)):
+
+erlang-bcrypt
+erlang-pbkdf2
+
+Just don't come up with your own incarnation of a password-derivation function. Use existing & verified stuff.  Erlang-pbkdf2 is from the  CouchDB codebase, which adds some  trustworthiness to it.
+","165","<python><erlang><cryptographic-hash-function>","0","1","3","2014-01-10 23:21:31","","3","","168868","","2014-01-10 23:21:31","2013-12-27 01:47:50",""
+"49926807","SHA512 in php how can i do this","How can I unhash sha512?
+Any one help me for unhash this code?
+I have this code:
+password_hash(base64_encode( hash('sha512','e4cefc2b2d9fd250c8e526770c2841b4bd9e1f7509ebbd13f997151153c2c86a69a2f28d0f4e9b23e9f2fc31f0103b5a4fae2ad9f1706845ea9b817517943aa2', true) ), PASSWORD_DEFAULT );
+
+Database stored value:
+$password = e4cefc2b2d9fd250c8e526770c2841b4bd9e1f7509ebbd13f997151153c2c86a69a2f28d0f4e9b23e9f2fc31f0103b5a4fae2ad9f1706845ea9b817517943aa2;
+
+","The definition of a hash function is that it cannot be reversed. Period. If it can be reversed, it's not a hash.
+","136","<php><cryptographic-hash-function>","-6","5","1","2018-04-21 19:14:48","","4","","2224584","","2018-04-21 19:14:48","2018-04-19 17:22:05","2018-04-21 19:15:24"
+"50459227","Reconciling Python 3 blake2b implementation with C reference implementation","I have been using Python's implementation of Blake2b (https://docs.python.org/3/library/hashlib.html#blake2) like this:
+>>> from hashlib import blake2b
+>>>
+>>> hashGenerator = blake2b()
+>>> hashFN = hashGenerator.copy()
+>>> hashFN.update(b'hi ho! hi ho! off to code I go...')
+>>> hashFN.hexdigest()
+'bd68fa3ae182a5485ae97bac10913c595358bd761a0ce91a14699907abf49dab29cba198903d80c1c25cc4b73eaa1c00d07a0c1572df04ef232cadddac8c381a'
+>>>
+>>> hashGenerator = blake2b(digest_size=16)
+>>> hashFN = hashGenerator.copy()
+>>> hashFN.update(b'hi ho! hi ho! off to code I go...')
+>>> hashFN.hexdigest()
+'626d821bd03ae3d7a523b04162c08468'
+
+After downloading and compiling the b2sum program included with the RFC 7693 reference code (from here https://github.com/BLAKE2/BLAKE2),
+we observe (note: LANG=en_US.UTF-8):
+MacBookMax:b2sum jlh$ echo ""hi ho! hi ho! off to code I go..."" | ./b2sum -a blake2b
+9b6372572a562989055fdf2837fa086c1ccc7c3c72e3d8bbb1785a0691bdd582499466d1dc6f513a4000f59c74619ca1e631a6a81f03c67a3771702e2d1b0b62  -
+MacBookMax:b2sum jlh$ echo ""hi ho! hi ho! off to code I go..."" | ./b2sum -a blake2b -l 128
+602a0bfeab058e6e5c9806a27bed4e72  -
+MacBookMax:b2sum jlh$
+
+They don't agree... I have tried different character encodings and methods parameters for in the Python script, but I cannot achieve agreement.
+As I use multiple languages to process the same data stream, it would be wonderfully helpful to learn how to get the Python implementation to agree with the C reference implementation.
+Thanks in advance for any help.
+","","100","<python><cryptographic-hash-function>","1","","0","2018-05-26 06:07:41","","1","","4909087","","2018-05-26 06:07:41","2018-05-22 03:10:10",""
+"36230985","Unable to encrypt plaintext to password","I'm trying enhance the current implementation of password hiding stated 
+Am I using it wrongly? As below is my code:
+import hashlib
+import binascii
+def Encrypt_Pass(password, authenticator, secret):
+        m = hashlib.md5()
+        m.update(secret+authenticator)
+        return """".join(chr(ord(x) ^ ord(y)) for x, y in zip(password.ljust
+       (16,'\0')[:16], m.digest()[:16]))
+result = Encrypt_Pass(""abcd1"",""344c71c77a2b845b8856ffa968740b73"",""sharedsecret"")
+ciphertext = ""6ed3a35440abe69b2e8698109b809932""#plaintext is cisco123
+print result.encode(""hex"")
+
+Result is shown below :
+2509f347a7c5bde3977bb944ae0eb89a
+
+As you can see the returned ciphertext DOES NOT match the encrypted password I capture ! Am I using the code wrongly? I verified that the plaintext password and shared key used are accurate.
+Appreciate if someone could point me the right direction.
+","Your authenticator is a hex string.  It needs to be converted to a binary string.  
+import hashlib
+from binascii import a2b_hex
+
+def Encrypt_Pass(password, authenticator, secret):
+    m = hashlib.md5()
+    m.update(secret + a2b_hex(authenticator))
+    return """".join(chr(ord(x) ^ ord(y)) for x, y in zip(password.ljust
+       (16,'\0')[:16], m.digest()[:16]))
+
+result = Encrypt_Pass(""cisco123"",""344c71c77a2b845b8856ffa968740b73"",""sharedsecret"")
+ciphertext = ""6ed3a35440abe69b2e8698109b809932""#plaintext is cisco123
+print result.encode(""hex"")
+
+","92","<python><python-2.7><authentication><freeradius><cryptographic-hash-function>","0","3","1","2016-03-27 15:24:22","36231128","1","0","4272752","","2016-03-27 15:24:22","2016-03-26 02:32:10",""
+"38762064","How do I choose the right checksum for a simple C++ program, and how do I implement it?","I'm very new to checksums, and fairly new to programming. I have a fairly simple C++ program (measuring psi) that I'm transferring to an Arduino board. Would crc16 be OK or should I go with crc32 or would that be overkill?
+","Checksums come up in the context of unreliable communication channels. A communication channel is an abstraction; bits go in one end and come out on the other end. An unreliable channel simply means that the bits which come out aren't the same as those which went in.
+Now obviously the most extreme unreliable channel has random bits come out. That's unusable, so we focus on the channels where the input and output are correlated.
+Still, we have many different corruption models. One common model is each bit is P% likely to fail. Another common model considers that bit errors typically come in bursts. Each bit then has a P% chance to start a bust of errors of length N, in which each bit is 50% likely to be wrong. Quite a few more models exist, depending on your problem - more advanced models also consider the chance of bits going completely missing.
+The correct checksum has a very, very high likelihood of detecting the type of error predicted by the model, but might not work well for other types of errors.
+For instance, I think with the Internet IP layer, the most common error is an entire IP packet going missing. That's why TCP uses sequence numbers to detect this particular error.
+","80","<c++><checksum><data-integrity><hash-function><cryptographic-hash-function>","-2","0","2","2016-08-04 08:50:14","38762330","3","","6365777","","2016-08-04 08:50:14","2016-08-04 08:20:12","2016-08-04 08:37:32"
+"38762064","How do I choose the right checksum for a simple C++ program, and how do I implement it?","I'm very new to checksums, and fairly new to programming. I have a fairly simple C++ program (measuring psi) that I'm transferring to an Arduino board. Would crc16 be OK or should I go with crc32 or would that be overkill?
+","A possible way to check that an executable has been correctly transmited to your Arduino board could be to use a simple checksum like md5, or even something even simpler, like some crude hash function computing a 16 bit hash. See e.g. this answer for inspiration.
+","80","<c++><checksum><data-integrity><hash-function><cryptographic-hash-function>","-2","0","2","2016-08-04 08:50:14","38762330","3","","6365777","","2016-08-04 08:50:14","2016-08-04 08:20:12","2016-08-04 08:37:32"
+"50978378","How can sha512 create hashes bigger than the string it is supplied with?","I have found it strange that sha512 can create a string so much smaller than what it is supplied with.
+Here is an example (in python):
+Python 3.6.0 (default, Jan 13 2017, 00:00:00) 
+[GCC 4.8.4] on linux
+Type ""help"", ""copyright"", ""credits"" or ""license"" for more information.
+>>> import hashlib
+>>> string='-'*10000
+>>> hash=hashlib.sha512(string.encode('utf-8'))
+>>> hash.hexdigest()
+'0d1e23b51e718f4e67c371a16e0f91fefce2802c0b674374e0e0e3309f0e10936a3b96aa0e29d44ad0ba23d0a019f3ff57bfd260b2ed4b6a06c2d343a6dc1800'
+>>> len(string)
+10000
+>>> len(hash.hexdigest())
+128
+
+How is it possible to create a hash over 78 times smaller than the raw string?
+","SHA-256 is non-reversable so it can be shorter. But the real answer is google SHA-256 (or another cryptographic hash) and examine the code. Here is a real-world example of a hash. A bottle club has over 1000 members but has only 100 bins to store member's bottles. It just uses the last 2 digits of the membership ID number for the bin number, a simple hash. That reduces the 1000+ bottle to 100 pigeonholes.
+See SHA-2 family for detailed information and pseudo-code.
+","70","<security><hash><sha><sha512><cryptographic-hash-function>","-2","1","1","2018-06-23 18:01:05","51000276","8","","451475","","2018-06-23 18:01:05","2018-06-21 22:43:15",""
+"56277330","Make PHP md5 hash match C# hash","I have a code on C# that im trying to rewrite to PHP, when it comes to encription my PHP result doesn't match hash in a DB generated by C# code
+public sealed class MD5Encryption
+  {
+    [DebuggerNonUserCode]
+    public MD5Encryption()
+    {
+    }
+
+    public static string Encode(string message)
+    {
+      return Base64.ConvertToBase64(new MD5CryptoServiceProvider().ComputeHash(new UTF8Encoding().GetBytes(message)));
+    }
+
+    public static string EncodeWithSalt(string message, string salt)
+    {
+      return MD5Encryption.Encode(salt + message);
+    }
+  }
+
+Here is a C# ConvertToBase64 
+    public static string ConvertToBase64(byte[] inputBytes)
+    {
+      return Convert.ToBase64String(inputBytes, 0, inputBytes.Length);
+    }
+
+        $string='6ec95f40-9fe3-4014-87d6-40c3b1fff77e'.'Danil18';
+        $strUtf8 = mb_convert_encoding($string, ""UTF-8"");
+        $encoded=md5($strUtf8);
+        $value=unpack('H*', $encoded);
+
+        echo base64_encode($encoded);//doesn't match maIdHxLbyqD2WkntiLGh2w==
+
+As shown in code salt is 6ec95f40-9fe3-4014-87d6-40c3b1fff77e 
+pass is Danil18.
+DB value maIdHxLbyqD2WkntiLGh2w==, 
+PHP output OTlhMjFkMWYxMmRiY2FhMGY2NWE0OWVkODhiMWExZGI=
+Is this code correct and i am missing some text transformation in C# class?
+UPDATE:
+After digging into C# base64 this code still doesnt output same result
+        $string='6ec95f40-9fe3-4014-87d6-40c3b1fff77e'.'Danil18'; //doesn't match maIdHxLbyqD2WkntiLGh2w==
+        $string='e734cc98-71bd-45ca-b02c-3b0cf020eb6d'.'x160126@nwytg.net'; //KNv0/uYGHDYuSRxvgYdPoQ==
+        $strUtf8 = mb_convert_encoding($string, ""UTF-8"");
+        $encoded=md5($strUtf8);
+        //$value=unpack('H*', $encoded);
+        $value=unpack('C*', $encoded);
+
+        $chars = array_map(""chr"", $value);
+        $bin = join($chars);
+        $hex = bin2hex($bin);
+
+        //$bin = hex2bin($value);
+        //print_r($value);
+        echo base64_encode($hex);//doesn't match maIdHxLbyqD2WkntiLGh2w== , KNv0/uYGHDYuSRxvgYdPoQ==
+
+","so, it was kind of hard, but ok:)
+if you look here there is second param for md5 function.
+use it and get the same result:
+<?php
+$string = '6ec95f40-9fe3-4014-87d6-40c3b1fff77e'.'Danil18';
+$string = utf8_encode($string);
+$string = md5($string, true);
+
+echo base64_encode($string);
+
+output:
+maIdHxLbyqD2WkntiLGh2w==
+
+demo
+","52","<c#><php><utf-8><md5><cryptographic-hash-function>","0","1","1","2019-05-28 20:06:24","56278820","8","","2224584","","2019-05-28 20:06:24","2019-05-23 14:21:32",""
+"56988949","Can I use SHA-3-256 with PBKDF2-HMAC?","I'm trying to build a secure file locker in Python using cryptography/Cryptodome module.
+Here's the link to my application: https://github.com/arunanshub/pycryptor
+I browsed up the internet where I found articles about SHA-256 for PBKDF2.
+But experimentally I implemented PBKDF2 with SHA3-256 without any apparent faults.
+Earlier I used a naive method where I derived a hash from the password with SHA3-256 only, without any salting. But later I thought of making the program more task specific. So, I implemented SHA3-256 with PBKDF2.
+key = hashlib.pbkdf2_hmac('sha3-256', password, salt, 10000, 32)
+
+# ############# CIPHER GENERATION PORTION #############
+# A cipher object will take care of the all
+# the required mac_tag and verification.
+# AES-GCM-256 chosen for security and authentication
+
+cipher_obj = AES.new(key, AES.MODE_GCM, nonce)
+crp = getattr(cipher_obj, method)
+mac_func = getattr(cipher_obj, 'digest')
+verifier = getattr(cipher_obj, 'verify')
+
+I expect that PBKDF2-SHA3-256 to be secure enough (or even better) like the SHA-256 version.
+","","35","<python-3.x><pbkdf2><hashlib><scrypt><cryptographic-hash-function>","0","","0","2019-07-11 12:15:27","","0","","","","","2019-07-11 12:15:27",""
+"47288275","Do Electrum (light weight bitcoin) have any function to purely compute hashes?","Are there any Electrum experts out there who can share with me if Electrum has any function/s just purely to compute hashes for transaction? if so, where exactly can i find them at in the source code(https://github.com/spesmilo/electrum)?
+Also, is it true that they only uses double SHA256 to hash each transaction? How do the hashing in electrum works?
+","","33","<python><hash><bitcoin><cryptographic-hash-function>","1","","0","2017-11-14 14:42:42","","1","","8886029","","2017-11-14 14:42:42","2017-11-14 14:31:46",""
+"57799283","How to generate hash values from hash function and how to get integer values from these hash values?","enter image description here
+here,string is ""SEAN"",then it converted to bigrams, each bigram produce different hash values,but i don't understand which hash function is used here and how it generates int values from hash values to map in bloom filter.
+","The hash function can be for example MurmurHash, the diagram doesn't specify this. It doesn't matter which one is used exactly, as long as you always use the same algorithm when accessing the Bloom filter.
+How to generate int values: for example using modulo the length of the Bloom filter bit array. A little bit faster is usually multiply & shift, but it is harder to understand.
+","30","<bloom-filter><hash-function><cryptographic-hash-function>","1","0","1","2019-09-12 04:23:56","","0","1","","","","2019-09-05 06:05:59",""
+"58609513","Encryption in node that follows same process as in .net","I am migrating from .net to node JS. The password in database is encrypted with HashProvider SHA256Managed class. Now i need to find an equivalent algorithm in NodeJS to match the passwords and users.
+I tried using crypto but the new pass and old pass doesnt match.
+const crypto = require(""crypto"");
+let hash = crypto
+          .createHmac(""SHA256"", saltFromDB)
+          .update(""testpass123"", ""ascii"")
+          .digest(""base64"");
+console.log(`New Password: ${hash}`);
+console.log(`Old Password: ${oldPass}`);
+
+.net uses the following code for encryption
+using (HashAlgorithm HashProvider = new SHA256Managed())
+            {
+                string base64Hash = Convert.ToBase64String(HashProvider.ComputeHash(Encoding.ASCII.GetBytes(password + salt)));
+                if (base64Hash.Length > 50)  // Password field max length
+                    base64Hash = base64Hash.Substring(0, 50);
+                return base64Hash;
+            }
+
+I'm looking for a NPM package which will let me match my new Password (encrypted with the respective Salt from DB) with the Old Password
+","","24","<javascript><c#><asp.net><node.js><cryptographic-hash-function>","0","","0","2019-10-31 20:32:50","","0","","2224584","","2019-10-31 20:32:50","2019-10-29 14:30:39",""
+"56279139","Recheck executable hash modification at runtime","For example, if I wrote an hello world program for example in C#,
+is there a way to check the running binary for modification at runtime?
+We could read the .exe file (for example in Linux the /proc/PID/exe file), hash it, and compare the hash at runtime, that might works fine, but can we read the (self) running executable as bytes from memory and hash it to check if it's modified by something else at runtime?
+","","14","<c#><runtime><cryptographic-hash-function>","0","","0","2019-05-23 16:09:24","","2","","1620210","","2019-05-23 16:09:24","2019-05-23 16:06:02",""
+"55587199","I have a hash function, how can I say it meets the criteria for a cryptographic hash function?","Say assume I have a cryptographic hash function, it will break a message to blocks, and each block is 20 bytes, the content of each block is treated as a positive integer, the function will take the sum of the 1st block's content, the square of 2nd block's content, the cube of the 3rd block's content, and so on, until it reaches the last block which we assume as mth block and take m^m as the value, then when we get the sum, we mod the sum with 2^160. I want to know why this hash function does not meet the criteria for a cryptographic hash function.
+So, what I have known so far is that:
+20 bytes per block = 160 bits per block
+recall the method of convert binary to decimal: 
+decimal = d0 * 2^0 + d1 * 2^1 + d2 * 2^2 + … + dn * 2^n, and in our case, n = 159
+hash value then will be (1st block + (2nd block)^2 + (3rd block)^3 + … + (mth block)^m) mod 2^160
+which equals to according to the property of mod operation:
+(1st block mod 2^160 + (2nd block)^2 mod 2^160 + (3rd block)^3 mod 2^160 + … + (mth block)^m mod 2^160) mod 2^160
+but I seem to know it is not a good function, but I could not tell why because I could not continue to analysis it.
+","","12","<cryptographic-hash-function>","0","","0","2019-04-09 07:23:21","","0","","","","","2019-04-09 07:23:21",""
