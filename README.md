@@ -1,5 +1,5 @@
 # SoftwareComposition2019
-Analysing cryptographic questions on online sources
+Analysing cryptographic questions on online sources.
 
 Data can be downloaded from [Data.StackExchange](https://data.stackexchange.com/stackoverflow/query/new)
 
@@ -30,3 +30,5 @@ left JOIN Posts answers ON answers.parentid = questions.id
 WHERE questions.Tags like '%<cryptography>%'
 order by questions.viewcount DESC
 ```
+
+The downloaded CSV files need to be placed in the directory `/Posts as CSV files`
